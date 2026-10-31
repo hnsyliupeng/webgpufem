@@ -1,0 +1,6 @@
+const assert=require('node:assert/strict'),opt=require('../quality-surface.js'),inspect=require('../cut-tet.js').inspect;
+const points=[[0,0,0],[1,0,0],[0,1,0],[0,0,1],[.03,.2,0]],faces=[[4,0,1],[4,1,2],[4,2,0]];
+function det(t){let [a,b,c,d]=t.map(i=>points[i]),u=b.map((v,k)=>v-a[k]),v=c.map((v,k)=>v-a[k]),w=d.map((v,k)=>v-a[k]);return u[0]*(v[1]*w[2]-v[2]*w[1])-u[1]*(v[0]*w[2]-v[2]*w[0])+u[2]*(v[0]*w[1]-v[1]*w[0])}
+let tets=faces.map(f=>{let t=[...f,3];if(det(t)<0)[t[1],t[2]]=[t[2],t[1]];return t}),mesh=inspect(points,tets,1),before=mesh.minJacobian,vol=mesh.volume,original=points.map(p=>p.slice());
+let r=opt(mesh,{passes:3,limit:3,maxMove:.1,bounds:[10,10,10]}),after=inspect(points,tets,1);assert.ok(r.totalMoves>0);assert.ok(after.minJacobian>before);assert.ok(r.maxObserved<=.100000001);assert.ok(Math.abs(after.volume-vol)<1e-10);assert.equal(points[4][2],0);assert.deepEqual(points.slice(0,4),original.slice(0,4));assert.ok(tets.every(t=>det(t)>0));
+mesh.boundaryReference=r.reference;let r2=opt(mesh,{passes:3,limit:3,maxMove:.1,bounds:[10,10,10]});assert.ok(r2.maxObserved<=.100000001);assert.throws(()=>opt(mesh,{maxMove:5,bounds:[10,10,10]}));console.log('bounded tangential boundary optimizer test passed');

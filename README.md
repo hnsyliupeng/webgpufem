@@ -1,6 +1,6 @@
 # TPMS 层级结构实验台
 
-基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js`、`cut-tet.js`、`mmg-worker.js`、`mmg-level-worker.js`、`quality-opt.js`、`quality-opt-worker.js` 和 `vendor/mmg`。
+基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js`、`cut-tet.js`、`mmg-worker.js`、`mmg-level-worker.js`、`quality-opt.js`、`quality-opt-worker.js`、`quality-surface.js`、`quality-surface-worker.js` 和 `vendor/mmg`。
 
 ## 现有功能及边界
 
@@ -76,3 +76,9 @@ MMG 的容差针对**输入离散曲面**，不是对原 TPMS 隐式曲面的误
 「局部修正最差单元」按每轮最差 Jacobian 单元筛选邻域，在固定全部边界节点的前提下搜索内部节点位置，最大化该节点相邻四面体的最小角点 Jacobian；可设置轮数、每轮候选单元数并取消。每次候选都拒绝反向或退化单元；结束后重新检查连通性、边界拓扑、全局最差 Jacobian、最大长高比及体积，检查失败或最差 Jacobian 未改善时保留原网格。该方法不改变边界拓扑，无法修复需要移动表面的劣质单元。修正后必须重新做几何采样筛查。
 
 默认一级 28³ 案例中，MMG 后最差 Jacobian 约 0.1101；以每轮 300 个候选、每次 8 轮执行两次局部修正后约为 0.2270，最大长高比约 5.74，体积不变。该结果仍未达到 0.3，**不能导出作为合格求解网格**，并且曲面误差筛查不是收敛验证。截图见 `screenshots/18-local-optimization-verified.png`，可使用 `npm run test:local-gui` 复现。二、三级多材料协调网格仍未实现。
+
+### 实验性边界切向修正
+
+「受限边界切向修正」针对最差单元邻域，仅允许平滑边界的节点沿近似切平面小幅移动；外盒与尖锐区域固定，并对每个节点限制相对于首次边界修正前的位置的累计位移（最大 0.2 mm）。候选检查受影响四面体方向及相邻边界三角面退化/法向变化；结束时检查拓扑、质量与体积。后续内部修正保留位移基准，禁止在边界试验后继续 MMG 重网格以免丢失基准。
+
+默认一级案例的 GUI 实测中，上限 0.05 mm 时最差 Jacobian 从 0.2270 提高到 0.2307；依然低于 0.3。该试验**没有完整的自交或严格曲面距离验证**，即使几何采样筛查通过也禁止导出。截图 `screenshots/19-surface-experiment.png`，可用 `npm run test:surface-gui` 重现；仅一级、无外壳结构支持当前流程，二、三级多材料协调网格仍未实现。

@@ -21,6 +21,6 @@ onmessage=async e=>{let h,api;try{
   if(result.minJacobian>=target&&result.maxAspect<10){reason='达到目标 Jacobian 与长高比';break}
  }
  if(!best)throw Error('没有产生通过拓扑/体积检查且最小 Jacobian 改善的网格。'+reason);
- best.source='MMG';best.history=history;best.iterationReason=reason;postMessage({result:best});
+ best.boundaryAltered=!!r.boundaryAltered;best.boundaryDisplacement=r.boundaryDisplacement;best.source='MMG';best.history=history;best.iterationReason=reason;postMessage({result:best});
  }catch(err){postMessage({error:String(err.message||err)})}finally{if(h&&api)api.mmg3d.free(h)}
 };
