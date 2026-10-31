@@ -28,3 +28,5 @@
 4. `04-voxel-mesh.png`：体素 C3D8 网格展示。
 
 可复现 GUI 测试：本地安装 Node.js、Chromium 和中文字体，执行 `npm ci`，设置 `CHROMIUM_PATH` 指向 Chromium，再执行 `npm run test:gui`。脚本通过 GUI 点击生成及下载、检查二进制 STL 长度与面数，并重写上述截图；测试不证明模型精度、流形性或工程适用性。
+
+参考项目的实际源码核查见 [docs/REFERENCES.md](docs/REFERENCES.md)；这些项目目前均未集成。
