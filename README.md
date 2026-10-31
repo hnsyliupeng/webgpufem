@@ -1,6 +1,6 @@
 # TPMS 层级结构实验台
 
-基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js`。
+基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js` 和 `cut-tet.js`。
 
 ## 现有功能及边界
 
@@ -30,3 +30,9 @@
 可复现 GUI 测试：本地安装 Node.js、Chromium 和中文字体，执行 `npm ci`，设置 `CHROMIUM_PATH` 指向 Chromium，再执行 `npm run test:gui`。脚本通过 GUI 点击生成及下载、检查二进制 STL 长度与面数，并重写上述截图；测试不证明模型精度、流形性或工程适用性。
 
 参考项目的实际源码核查见 [docs/REFERENCES.md](docs/REFERENCES.md)；这些项目目前均未集成。
+
+## 实验性 TPMS 切割四面体
+
+「TPMS 边界切割四面体网格」对一级结构的隐式函数做节点采样、线性插值切割背景四面体，并显示所得体单元的边界三角形；不是体素六面体。显示四面体数量、归一化平均比质量与直方计数。`screenshots/05-cut-tetrahedra.png` 是 GUI 实测截图。
+
+这是研究原型：仅一级单材料、均匀背景；曲面为分片线性近似，采样可能漏掉薄壁或改变拓扑。未实现自适应、修复、多材料界面、曲面误差、完整流形/连通性验证，也没有接入力学求解器；不得用于工程求解。单元平面切割的体积、正方向与简单边界裂缝测试不等于 TPMS 几何验证。
