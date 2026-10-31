@@ -7,3 +7,6 @@ for(const f of r.boundary){const p=f.map(i=>r.points[i]);assert.ok([0,1,2].some(
 console.log('cut tetrahedron plane test passed');
 const estimate=build.estimateGeometry({lx:2,ly:2,lz:2},{n:8,boundaryPoints:[[-.13,0,0],[-.03,0,0]]});
 assert.ok(Math.abs(estimate.volume-3.48)<.2);assert.equal(estimate.boundarySamples,2);assert.ok(Math.abs(estimate.max-.1)<1e-8);
+// The reported worst element must reference the actual bad tetrahedron, not always element zero.
+const inspected=build.inspect([[0,0,0],[1,0,0],[0,1,0],[0,0,1],[2,0,0],[3,0,0],[2,1,0],[2,0,.001]],[[0,1,2,3],[4,5,6,7]],1);
+assert.equal(inspected.worstTet,1);

@@ -24,15 +24,16 @@ function buildCutTetMesh(p,o,notify=()=>{}) {
 function inspectCutTetMesh(pts,tet,n){
  const xyz=id=>pts[id], sub=(a,b)=>a.map((x,i)=>x-b[i]),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0),length=a=>Math.sqrt(dot(a,a));
  let faces=new Map();for(let element=0;element<tet.length;element++){let [a,b,c,d]=tet[element];for(const f of [[a,b,c],[a,b,d],[a,c,d],[b,c,d]]){let k=f.slice().sort((x,y)=>x-y).join(':');let e=faces.get(k);if(e){e.count++;e.elements.push(element)}else faces.set(k,{f,count:1,elements:[element]})}}
- let worst=Infinity, small=0, nonmanifold=0, histogram=Array(10).fill(0), volume=0, maxAspect=0, minAngle=180, minJacobian=1;
+ let worst=Infinity, small=0, nonmanifold=0, histogram=Array(10).fill(0), volume=0, maxAspect=0, minAngle=180, minJacobian=1,worstTet=-1,tetIndex=0;
  const parent=Int32Array.from({length:tet.length},(_,i)=>i),find=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i]}return i},join=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[a]=b};
  for(const t of tet){let [a,b,c,d]=t.map(xyz),det=Math.abs(dot(sub(b,a),cross(sub(c,a),sub(d,a)))),pairs=[[a,b],[a,c],[a,d],[b,c],[b,d],[c,d]],sum=pairs.reduce((s,[u,v])=>s+dot(sub(u,v),sub(u,v)),0),q=12*Math.pow(det/2,2/3)/sum;volume+=det/6;worst=Math.min(worst,q);histogram[Math.min(9,Math.max(0,Math.floor(q*10)))]++;if(q<.1)small++;
   let longest=Math.max(...pairs.map(([u,v])=>length(sub(u,v))));let facets=[[a,b,c],[a,b,d],[a,c,d],[b,c,d]];for(const [u,v,w] of facets){let area2=length(cross(sub(v,u),sub(w,u)));maxAspect=Math.max(maxAspect,longest*area2/det);for(const [p1,p2,p3] of [[u,v,w],[v,u,w],[w,u,v]]){let e=sub(p2,p1),f=sub(p3,p1);minAngle=Math.min(minAngle,Math.acos(Math.max(-1,Math.min(1,dot(e,f)/(length(e)*length(f)))))*180/Math.PI)}}
-  for(let i=0;i<4;i++){let other=[0,1,2,3].filter(j=>j!==i),p0=xyz(t[i]),e=other.map(j=>sub(xyz(t[j]),p0));minJacobian=Math.min(minJacobian,det/(length(e[0])*length(e[1])*length(e[2])))}
+  for(let i=0;i<4;i++){let other=[0,1,2,3].filter(j=>j!==i),p0=xyz(t[i]),e=other.map(j=>sub(xyz(t[j]),p0));let j=det/(length(e[0])*length(e[1])*length(e[2]));if(j<minJacobian){minJacobian=j;worstTet=tetIndex}}
+  tetIndex++;
  }
  let boundary=[], edgeCounts=new Map();for(const x of faces.values()){if(x.count===1){boundary.push(x.f);for(const [a,b] of [[x.f[0],x.f[1]],[x.f[1],x.f[2]],[x.f[2],x.f[0]]]){let k=a<b?a+':'+b:b+':'+a;edgeCounts.set(k,(edgeCounts.get(k)||0)+1)}}if(x.count===2)join(x.elements[0],x.elements[1]);if(x.count>2)nonmanifold++}
  let badEdges=Array.from(edgeCounts.values()).filter(count=>count!==2).length,components=new Set(tet.map((_,i)=>find(i))).size;
- return {points:pts,tets:tet,boundary,worst,small,nonmanifold,badEdges,components,histogram,n,volume,maxAspect,minAngle,minJacobian};
+ return {points:pts,tets:tet,boundary,worst,small,nonmanifold,badEdges,components,histogram,n,volume,maxAspect,minAngle,minJacobian,worstTet};
 }
 if(typeof module!=='undefined'){module.exports=buildCutTetMesh;module.exports.inspect=inspectCutTetMesh;}
 
