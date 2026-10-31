@@ -5,7 +5,7 @@ function buildCutTetMesh(p,o,notify=()=>{}) {
  const sub=(a,b)=>a.map((x,i)=>x-b[i]), cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]], dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
  const length=a=>Math.sqrt(dot(a,a));
  for(let z=0;z<=n;z++)for(let y=0;y<=n;y++)for(let x=0;x<=n;x++){
-  const X=2*x/n-1,Y=2*y/n-1,Z=2*z/n-1;pts.push([X*p.lx/2,Y*p.ly/2,Z*p.lz/2]);let f=geo(X,Y,Z,p)[0];val.push(Math.abs(f)<1e-10?1e-10:f);
+  const X=2*x/n-1,Y=2*y/n-1,Z=2*z/n-1;pts.push([X*p.lx/2,Y*p.ly/2,Z*p.lz/2]);let values=geo(X,Y,Z,p),f=o.hierarchical?(p.layer?values[p.layer-1]:Math.min(values[0],values[1],values[2])):values[0];val.push(Math.abs(f)<1e-10?1e-10:f);
  }
  const edge=(a,b)=>{let k=a<b?a+':'+b:b+':'+a;if(crossings.has(k))return crossings.get(k);const t=val[a]/(val[a]-val[b]),A=xyz(a),B=xyz(b),id=pts.length;pts.push(A.map((v,i)=>v+t*(B[i]-v)));crossings.set(k,id);return id};
  const clip=ids=>{let r=[];for(let i=0;i<ids.length;i++){let a=ids[i],b=ids[(i+1)%ids.length],ina=val[a]<0,inb=val[b]<0;if(ina)r.push(a);if(ina!==inb)r.push(edge(a,b))}return r};
@@ -42,8 +42,8 @@ function sampleLevelset(p,o,notify=()=>{}){let n=o.n,values=new Float64Array((n+
 // Diagnostic sampling only; estimates are not rigorous error bounds.
 function estimateTPMSGeometry(p,o,notify=()=>{}){
  const n=o.n, L=[p.lx,p.ly,p.lz], m=Math.min(96,Math.max(24,3*n)),total=m**3, eps=1e-4;
- let inside=0;for(let z=0;z<m;z++){if(z%8===0)notify('正在评估几何采样误差 '+z+'/'+m);for(let y=0;y<m;y++)for(let x=0;x<m;x++)if(geo(2*(x+.5)/m-1,2*(y+.5)/m-1,2*(z+.5)/m-1,p)[0]<0)inside++}
- let errors=[];for(let xyz of o.boundaryPoints){let q=xyz.map((v,i)=>2*v/L[i]);if(q.some(v=>Math.abs(v)>.999999))continue;let f=geo(...q,p)[0],g=[];for(let i=0;i<3;i++){let a=q.slice(),b=q.slice();a[i]+=eps;b[i]-=eps;g.push((geo(...a,p)[0]-geo(...b,p)[0])/(eps*L[i]))}let norm=Math.hypot(...g);if(norm>1e-12&&Number.isFinite(f/norm))errors.push(Math.abs(f/norm))}
+ let inside=0;for(let z=0;z<m;z++){if(z%8===0)notify('正在评估几何采样误差 '+z+'/'+m);for(let y=0;y<m;y++)for(let x=0;x<m;x++)if((d=>o.hierarchical?(p.layer?d[p.layer-1]:Math.min(d[0],d[1],d[2])):d[0])(geo(2*(x+.5)/m-1,2*(y+.5)/m-1,2*(z+.5)/m-1,p))<0)inside++}
+ let errors=[];for(let xyz of o.boundaryPoints){let q=xyz.map((v,i)=>2*v/L[i]);if(q.some(v=>Math.abs(v)>.999999))continue;let field=q=>{let d=geo(...q,p);return o.hierarchical?(p.layer?d[p.layer-1]:Math.min(d[0],d[1],d[2])):d[0]},f=field(q),g=[];for(let i=0;i<3;i++){let a=q.slice(),b=q.slice();a[i]+=eps;b[i]-=eps;g.push((field(a)-field(b))/(eps*L[i]))}let norm=Math.hypot(...g);if(norm>1e-12&&Number.isFinite(f/norm))errors.push(Math.abs(f/norm))}
  errors.sort((a,b)=>a-b);const volume=inside/total*L[0]*L[1]*L[2];return {volume,m,inside,total,boundarySamples:errors.length,p95:errors.length?errors[Math.min(errors.length-1,Math.floor(.95*errors.length))]:null,max:errors.length?errors[errors.length-1]:null};
 }
 if(typeof module!=='undefined')module.exports.estimateGeometry=estimateTPMSGeometry;

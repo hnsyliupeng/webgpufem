@@ -1,3 +1,4 @@
+var selectWorst = typeof module!=='undefined' ? require('./quality-select.js') : selectWorstQuality;
 /* Interior-node patch max-min Jacobian optimization. Boundary nodes are immovable. */
 function optimizeInteriorJacobian(mesh,options={},notify=()=>{}) {
  const {points,tets,boundary}=mesh,passes=options.passes??2,limit=options.limit??60;
@@ -11,7 +12,7 @@ function optimizeInteriorJacobian(mesh,options={},notify=()=>{}) {
  let history=[],totalMoves=0;
  for(let pass=1;pass<=passes;pass++){
   notify(`局部质量优化 ${pass}/${passes}：选择最差单元…`);
-  const candidates=Array.from({length:tets.length},(_,i)=>i).sort((a,b)=>quality[a]-quality[b]).slice(0,limit);let moves=0,visited=new Set();
+  const candidates=selectWorst(quality,limit);let moves=0,visited=new Set();
   for(const tid of candidates)for(const id of tets[tid]){
    if(fixed[id]||visited.has(id))continue;visited.add(id);const star=incident[id];if(!star.length)continue;
    let before=1;for(const i of star)before=Math.min(before,quality[i]);let p=points[id],origin=p.slice(),near=Infinity;for(const i of star)for(const j of tets[i])if(j!==id)near=Math.min(near,Math.hypot(...points[j].map((v,k)=>v-origin[k])));if(!(near>0&&Number.isFinite(near)))continue;

@@ -1,3 +1,4 @@
+var selectWorst = typeof module!=='undefined' ? require('./quality-select.js') : selectWorstQuality;
 /* Experimental conforming interior 2-to-3 and 3-to-2 tetrahedral flips. */
 function optimizeTetFlips(mesh,options={},notify=()=>{}) {
  const {points}=mesh,passes=options.passes??3,limit=options.limit??300,maxFlips=options.maxFlips??30;
@@ -9,7 +10,7 @@ function optimizeTetFlips(mesh,options={},notify=()=>{}) {
  for(let pass=1;pass<=passes;pass++){
   notify(`拓扑翻转 ${pass}/${passes}：构建邻接…`);let faceMap=new Map(),edges=new Set(),edgeMap=new Map(),q=new Float64Array(tets.length);
   for(let i=0;i<tets.length;i++){let t=tets[i];q[i]=quality(t);if(q[i]<=0)throw Error('输入含反向或退化单元');for(let a=0;a<4;a++)for(let b=a+1;b<4;b++){let k=key([t[a],t[b]]);edges.add(k);let e=edgeMap.get(k);if(e)e.ids.push(i);else edgeMap.set(k,{edge:[t[a],t[b]],ids:[i]})}for(let f of facets(t)){let k=key(f),arr=faceMap.get(k);if(arr)arr.ids.push(i);else faceMap.set(k,{face:f,ids:[i]})}}
-  const worst=Array.from({length:tets.length},(_,i)=>i).sort((a,b)=>q[a]-q[b]).slice(0,limit),seen=new Set(),candidates=[];
+  const worst=selectWorst(q,limit),seen=new Set(),candidates=[];
   for(let i of worst)for(let f of facets(tets[i])){let k=key(f);if(seen.has(k))continue;seen.add(k);let adj=faceMap.get(k);if(!adj||adj.ids.length!==2)continue;let [i1,i2]=adj.ids,t1=tets[i1],t2=tets[i2],d=t1.find(v=>!f.includes(v)),e=t2.find(v=>!f.includes(v));if(d===undefined||e===undefined||d===e||edges.has(key([d,e])))continue;
    let newTets=[[d,e,f[0],f[1]],[d,e,f[1],f[2]],[d,e,f[2],f[0]]],sum=0,valid=true;for(let t of newTets){let det=determinant(t);if(Math.abs(det)<1e-14){valid=false;break}if(det<0){[t[0],t[1]]=[t[1],t[0]];det=-det}sum+=det}let oldSum=determinant(t1)+determinant(t2);if(!valid||Math.abs(sum-oldSum)>Math.max(1e-10,Math.abs(oldSum)*1e-9))continue;
    let before=Math.min(q[i1],q[i2]),after=Math.min(...newTets.map(quality));if(after>before+1e-7)candidates.push({ids:[i1,i2],vertices:[...f,d,e],newTets,before,after});
