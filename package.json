@@ -16,7 +16,8 @@
     "test:multiregion-gui": "node tests/gui-multiregion.cjs",
     "test:gmsh-surface-gui": "node tests/gui-gmsh-surface.cjs",
     "test:material-mmg-gui": "node tests/gui-material-mmg.cjs",
-    "test:material-mmg-analytic": "node tests/material-mmg-analytic.cjs"
+    "test:material-mmg-analytic": "node tests/material-mmg-analytic.cjs",
+    "test:secondary-gui": "node tests/gui-secondary.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.58.2"
