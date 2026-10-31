@@ -1,0 +1,61 @@
+{
+  "name": "@loumalouomega/mmg-wasm",
+  "version": "0.1.0",
+  "description": "MMG surface and volume remeshers (mmg2d, mmgs, mmg3d) compiled to WebAssembly with a typed JS API",
+  "license": "LGPL-3.0-or-later",
+  "author": "Vicente Mataix Ferrándiz",
+  "homepage": "https://loumalouomega.github.io/MMG-WASM/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/loumalouomega/MMG-WASM.git"
+  },
+  "bugs": {
+    "url": "https://github.com/loumalouomega/MMG-WASM/issues"
+  },
+  "type": "module",
+  "main": "./dist/mmg.cjs",
+  "module": "./dist/mmg.mjs",
+  "types": "./dist/mmg.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mmg.d.ts",
+      "import": "./dist/mmg.mjs",
+      "require": "./dist/mmg.cjs"
+    },
+    "./mmg-core.wasm": "./dist/mmg-core.wasm"
+  },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "setup": "scripts/setup-emsdk.sh",
+    "build:wasm": "scripts/build-wasm.sh",
+    "build": "scripts/build-wasm.sh",
+    "gen": "scripts/gen-bindings.sh",
+    "test": "node --test test/smoke.test.mjs test/api.test.mjs",
+    "test:browser": "node --test test/browser.test.mjs",
+    "docs:api": "python3 scripts/gen_docs_api.py",
+    "docs:build": "python3 scripts/gen_docs_api.py && mkdocs build",
+    "docs:serve": "python3 scripts/gen_docs_api.py && mkdocs serve"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  },
+  "keywords": [
+    "mmg",
+    "remeshing",
+    "mesh",
+    "mesh-adaptation",
+    "anisotropic",
+    "level-set",
+    "fem",
+    "tetrahedral",
+    "wasm",
+    "webassembly"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
