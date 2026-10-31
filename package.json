@@ -17,7 +17,10 @@
     "test:gmsh-surface-gui": "node tests/gui-gmsh-surface.cjs",
     "test:material-mmg-gui": "node tests/gui-material-mmg.cjs",
     "test:material-mmg-analytic": "node tests/material-mmg-analytic.cjs",
-    "test:secondary-gui": "node tests/gui-secondary.cjs"
+    "test:secondary-gui": "node tests/gui-secondary.cjs",
+    "test:simwild-analytic": "${TPMS_PYTHON:-python3} tests/simwild-analytic.py",
+    "test:simwild-preflight-gui": "node tests/gui-simwild-preflight.cjs",
+    "test:simwild-custom-gui": "node tests/gui-simwild-custom.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.58.2"

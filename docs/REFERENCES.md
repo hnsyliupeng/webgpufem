@@ -10,3 +10,7 @@
 ## 浏览器端候选内核
 
 [@loumalouomega/gmsh-wasm](https://github.com/loumalouomega/GMSH-JS) 将 Gmsh 和 OpenCASCADE 编译为 WASM，支持体网格及 STEP 的读写基础设施，但**目前没有接入本应用，也不自动提供 TPMS 的有效 B-Rep**。浏览器构建需 SharedArrayBuffer 和 COOP/COEP 响应头，与直接打开 file:// 的需求冲突；分发静态链接的二进制需遵守 GPL-2.0-or-later。需要先解决隐式 TPMS 到封闭曲面/体域、模型误差、流形性、多材料接口和许可，再实现并验证四面体网格及其质量。
+
+## WildMeshing Toolkit 2.0 / SimWild
+- [SimWild tutorial and API](https://github.com/wildmeshing/wildmeshing-toolkit/blob/main/docs/tutorials/simwild.md) and [project](https://github.com/wildmeshing/wildmeshing-toolkit): simultaneous insertion of several closed input surfaces, winding-number region tags including overlaps, followed by envelope-constrained tet optimization. The envelope bounds movement relative to the *discrete input surfaces*, not the underlying TPMS.
+- The optional Python backend uses `wildmeshing==2.0.0`, separately licensed by its upstream project. Analytic shared-interface tests pass; actual App hierarchical presets fail geometry and topology checks, and current preflight prevents expensive execution on obviously aliased surfaces. See README for exact GUI results and remaining limitations.

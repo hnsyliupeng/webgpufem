@@ -1,0 +1,3 @@
+# Optional native multi-region meshing backend; not used by the browser-only mode.
+wildmeshing==2.0.0
+scikit-image==0.26.0
