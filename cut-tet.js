@@ -46,3 +46,18 @@ function estimateTPMSGeometry(p,o,notify=()=>{}){
  errors.sort((a,b)=>a-b);const volume=inside/total*L[0]*L[1]*L[2];return {volume,m,inside,total,boundarySamples:errors.length,p95:errors.length?errors[Math.min(errors.length-1,Math.floor(.95*errors.length))]:null,max:errors.length?errors[errors.length-1]:null};
 }
 if(typeof module!=='undefined')module.exports.estimateGeometry=estimateTPMSGeometry;
+/* Clip linearized signed TPMS field against BOTH sheet boundaries inside each background tet. */
+function buildShellTetMesh(p,o,notify=()=>{}) {
+ if(p.form!==1 || p.host!==0)throw Error('当前双界面算法仅支持无外壳的一级板壳。');
+ const n=o.n,m=n+1,points=[],fields=[],tet=[],edges=new Map(),at=(x,y,z)=>x+m*(y+m*z);
+ const sub=(a,b)=>a.map((v,i)=>v-b[i]),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+ for(let z=0;z<=n;z++)for(let y=0;y<=n;y++)for(let x=0;x<=n;x++){let X=2*x/n-1,Y=2*y/n-1,Z=2*z/n-1,v=geo(X,Y,Z,p),a=v[5],w=v[12];if(!Number.isFinite(a)||!Number.isFinite(w)||!(w>0))throw Error('无效壳体隐式函数');points.push([X*p.lx/2,Y*p.ly/2,Z*p.lz/2]);fields.push([a-w,-a-w])}
+ function edge(a,b,k){let key=(a<b?a+':'+b:b+':'+a)+':'+k;if(edges.has(key))return edges.get(key);let fa=fields[a][k],fb=fields[b][k],t=fa/(fa-fb),id=points.length;points.push(points[a].map((v,i)=>v+t*(points[b][i]-v)));fields.push(fields[a].map((v,i)=>v+t*(fields[b][i]-v)));fields[id][k]=0;edges.set(key,id);return id}
+ function clipFaces(faces,k){let out=[],cut=new Set();for(const face of faces){let poly=[];for(let j=0;j<face.length;j++){let a=face[j],b=face[(j+1)%face.length],ia=fields[a][k]<=0,ib=fields[b][k]<=0;if(ia)poly.push(a);if(ia!==ib){let c=edge(a,b,k);poly.push(c);cut.add(c)}}poly=poly.filter((v,i)=>v!==poly[(i+poly.length-1)%poly.length]);if(poly.length>=3)out.push(poly)}
+  let c=Array.from(cut);if(c.length>=3){let center=[0,1,2].map(j=>c.reduce((s,id)=>s+points[id][j],0)/c.length),u=sub(points[c[0]],center),v=null;for(let i=1;i<c.length;i++){let w=cross(u,sub(points[c[i]],center));if(dot(w,w)>1e-24){v=cross(w,u);break}}if(v){c.sort((a,b)=>Math.atan2(dot(sub(points[a],center),v),dot(sub(points[a],center),u))-Math.atan2(dot(sub(points[b],center),v),dot(sub(points[b],center),u)));out.push(c)}}return out}
+ function addFace(poly,center){let first=poly.indexOf(Math.min(...poly)),q=poly.slice(first).concat(poly.slice(0,first));for(let i=1;i<q.length-1;i++){let a=q[0],b=q[i],c=q[i+1],A=points[a],det=dot(sub(points[b],A),cross(sub(points[c],A),sub(points[center],A)));if(Math.abs(det)<1e-12)continue;if(det<0)[b,c]=[c,b];tet.push([a,b,c,center])}}
+ const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+ for(let z=0;z<n;z++){notify('双界面切割四面体：'+z+'/'+n);for(let y=0;y<n;y++)for(let x=0;x<n;x++)for(let order of perms){let c=[x,y,z],v=[at(...c)];for(let k of order){c=c.slice();c[k]++;v.push(at(...c))}if(v.every(i=>fields[i][0]>0)||v.every(i=>fields[i][1]>0))continue;let f=[[v[0],v[1],v[2]],[v[0],v[3],v[1]],[v[0],v[2],v[3]],[v[1],v[3],v[2]]];f=clipFaces(f,0);if(!f.length)continue;f=clipFaces(f,1);if(!f.length)continue;let ids=[...new Set(f.flat())],center=points.length;points.push([0,1,2].map(k=>ids.reduce((s,i)=>s+points[i][k],0)/ids.length));fields.push([0,0]);for(let poly of f)addFace(poly,center)}}
+ if(!tet.length)throw Error('没有生成壳体四面体，请检查参数。');return inspectCutTetMesh(points,tet,n);
+}
+if(typeof module!=='undefined')module.exports.buildShell=buildShellTetMesh;

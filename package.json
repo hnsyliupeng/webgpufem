@@ -1,6 +1,6 @@
 {
   "name": "tpms-browser-lab",
   "private": true,
-  "scripts": {"test": "node tests/voxel-stl.test.js && node tests/cut-tet.test.js && node tests/mmg-level.test.cjs", "test:gui": "node tests/gui.cjs", "test:level-gui": "node tests/gui-level.cjs"},
+  "scripts": {"test": "node tests/voxel-stl.test.js && node tests/cut-tet.test.js && node tests/shell-tet.test.js && node tests/mmg-level.test.cjs", "test:gui": "node tests/gui.cjs", "test:level-gui": "node tests/gui-level.cjs", "test:shell-gui": "node tests/gui-shell.cjs"},
   "devDependencies": {"playwright-core": "1.58.2"}
 }
