@@ -2,7 +2,7 @@
   "name": "tpms-browser-lab",
   "private": true,
   "scripts": {
-    "test": "node tests/voxel-stl.test.js && node tests/cut-tet.test.js && node tests/hierarchical-cut.test.js && node tests/multiregion.test.js && node tests/material-opt.test.cjs && node tests/shell-tet.test.js && node tests/quality-select.test.js && node tests/quality-opt.test.js && node tests/quality-surface.test.js && node tests/topology-opt.test.js && node tests/deep-opt.test.cjs && node tests/mmg-level.test.cjs",
+    "test": "node tests/voxel-stl.test.js && node tests/cut-tet.test.js && node tests/hierarchical-cut.test.js && node tests/multiregion.test.js && node tests/material-opt.test.cjs && node tests/shell-tet.test.js && node tests/quality-select.test.js && node tests/quality-opt.test.js && node tests/quality-surface.test.js && node tests/topology-opt.test.js && node tests/deep-opt.test.cjs && node tests/mmg-level.test.cjs && node tests/gmsh-surface-gate.test.cjs",
     "test:gui": "node tests/gui.cjs",
     "test:level-gui": "node tests/gui-level.cjs",
     "test:shell-gui": "node tests/gui-shell.cjs",
@@ -13,7 +13,8 @@
     "test:hier-gui": "node tests/gui-hier.cjs",
     "serve": "node serve.cjs",
     "test:gmsh-gui": "node tests/gui-gmsh.cjs",
-    "test:multiregion-gui": "node tests/gui-multiregion.cjs"
+    "test:multiregion-gui": "node tests/gui-multiregion.cjs",
+    "test:gmsh-surface-gui": "node tests/gui-gmsh-surface.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.58.2"
