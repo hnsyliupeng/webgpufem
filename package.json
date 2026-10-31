@@ -1,0 +1,6 @@
+{
+  "name": "tpms-browser-lab",
+  "private": true,
+  "scripts": {"test": "node tests/voxel-stl.test.js", "test:gui": "node tests/gui.cjs"},
+  "devDependencies": {"playwright-core": "1.58.2"}
+}
