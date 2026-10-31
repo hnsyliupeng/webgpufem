@@ -92,3 +92,10 @@ MMG 的容差针对**输入离散曲面**，不是对原 TPMS 隐式曲面的误
 默认二级预设在 20³ 网格实测 305728 四面体、17 个分量，采样体积相对差 12.46%，边界距离估计 P95 4.305 mm，深度联合优化未改善全局最差值；MMG 返回失败。三级默认预设实测 318656 四面体、1 个分量，采样体积差 1.69%，P95 2.379 mm；联合优化最差 Jacobian 0.0008 → 0.0012，仍严重不合格。距离是局部一阶估算而非严格界，也不能代替逐层几何/材料界面验证。GUI 可复现：`npm run test:hier-gui`（需设置 `CHROMIUM_PATH`）。
 
 质量优化候选选择使用固定容量最大堆，只保存 K 个最差单元，将每轮全量排序 O(N log N)、O(N) 临时索引替换成 O(N log K)、O(K)；这提高候选筛选效率，但不会消除几何漏采、材料界面及低质量瓶颈。
+
+### 通用 CAD 实体贴体网格（Gmsh）
+执行 `npm install` 然后 `npm run serve`，在服务地址打开应用。服务设置 COOP/COEP，供 Gmsh WebAssembly 使用；直接打开文件或普通静态服务不能使用该功能。界面可导入含实体的 STEP / IGES / BREP，或创建带球形空腔的 OpenCASCADE 示例并导出真实 STEP。通过 Gmsh 的曲率尺寸控制、最小/最大网格尺寸、三维 Delaunay 与优化生成 C3D4；支持 1–4 线程，显示真实四面体剖面、边界、质量和耗时。优化前后均检查网格质量和拓扑，若退化则保留优化前结果。GUI 自动测试：`npm run test:gmsh-gui`（需 `CHROMIUM_PATH`）。
+
+`@loumalouomega/gmsh-wasm` 使用 GPL-2.0-or-later；分发或修改时须遵守其 GPL 条款及上游源代码提供要求。此路径依赖输入文件已有可网格化的 CAD 实体，并不自动将 TPMS 隐式曲面转换为精确 CAD，不能解决二级/三级 TPMS 材料界面、薄壁漏采与质量失败。当前不导出通用 CAD 求解网格，因为材料编号、边界条件、多体接口和独立收敛验证尚未完成。
+
+二级和三级预设的实际 GUI 四面体剖面与剖切图：`screenshots/level2-tet-slice-20.png`、`screenshots/level2-tet-cutaway-20.png`、`screenshots/level3-tet-slice-20.png`、`screenshots/level3-tet-cutaway-20.png`；这些截图展示的是不合格的实验网格，不表示通过验证。28³ 加密实测：二级 772224 单元、5 个分量、体积采样差 5.24%、边界 P95 3.574 mm；三级 804288 单元、1 个分量、体积采样差 3.60%、P95 1.761 mm；两者联合优化均未改善最差 Jacobian。加密并未解决漏采和单元质量问题。
