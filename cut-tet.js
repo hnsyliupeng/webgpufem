@@ -35,3 +35,6 @@ function inspectCutTetMesh(pts,tet,n){
  return {points:pts,tets:tet,boundary,worst,small,nonmanifold,badEdges,components,histogram,n,volume,maxAspect,minAngle,minJacobian};
 }
 if(typeof module!=='undefined'){module.exports=buildCutTetMesh;module.exports.inspect=inspectCutTetMesh;}
+
+// Sample the existing TPMS field, retaining signed values (not center voxel labels).
+function sampleLevelset(p,o,notify=()=>{}){let n=o.n,values=new Float64Array((n+1)**3),i=0;for(let z=0;z<=n;z++){notify(`采样 TPMS 隐式函数 ${z}/${n}`);for(let y=0;y<=n;y++)for(let x=0;x<=n;x++)values[i++]=geo(2*x/n-1,2*y/n-1,2*z/n-1,p)[0]}return {n,values}}

@@ -1,6 +1,6 @@
 # TPMS 层级结构实验台
 
-基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js`、`cut-tet.js`、`mmg-worker.js` 和 `vendor/mmg`。
+基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js`、`cut-tet.js`、`mmg-worker.js`、`mmg-level-worker.js` 和 `vendor/mmg`。
 
 ## 现有功能及边界
 
@@ -46,3 +46,7 @@
 MMG 的容差针对**输入离散曲面**，不是对原 TPMS 隐式曲面的误差保证；局部几何可能变化，体积检查不能代替 Hausdorff 误差、壁厚或网格收敛验证。当前不支持材料界面、误差驱动自适应、求解中重网格或场变量映射。测试案例 20³ 重网格后角点 Jacobian 约 0.0243、最大长高比约 27.58，仍不达标且不能导出；分辨率 20³ 与 28³ 原网格体积差异也表明采样尚未收敛。请勿用于工程求解。直接使用 `file://` 可能因浏览器 Worker/WASM 同源限制失败；通过静态 HTTP 服务打开。
 
 内核 [MMG-WASM 0.1.0](https://github.com/loumalouomega/MMG-WASM) 基于 MMG 5.8.0，许可证为 LGPL-3.0-or-later，许可证与上游说明随 `vendor/mmg` 提供；用户应遵守相应分发条款。
+
+### MMG 隐式域直接生成（实验）
+
+「MMG 隐式曲面生成四面体」将 TPMS 隐式函数采样到协调的背景四面体，交给 MMG3D 的 level-set 离散化，提取负域四面体并检查；不是体素六面体。支持取消长时间运行。半盒解析几何的负域体积和连通性测试通过，但默认 TPMS 的 12³ GUI 实测仍有 144 个面连通分量、最差角点 Jacobian 0.0171、最大长高比 31.65，**不合格，导出被禁用**；20³ 实测超过 180 秒未完成，不能声称有效。请勿用于求解。`npm run test:level-gui` 可重现 12³ 浏览器测试。
