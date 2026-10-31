@@ -5,3 +5,5 @@ let volume=0;for(const t of r.tets){const [a,b,c,d]=t.map(i=>r.points[i]),v=(u,w
 // Every boundary triangle must lie on the test plane or the bounding box.
 for(const f of r.boundary){const p=f.map(i=>r.points[i]);assert.ok([0,1,2].some(k=>[-1,1].some(a=>p.every(v=>Math.abs(v[k]-a)<1e-8)))||p.every(v=>Math.abs(v[0]+.13)<1e-8),'unexpected interior crack')}
 console.log('cut tetrahedron plane test passed');
+const estimate=build.estimateGeometry({lx:2,ly:2,lz:2},{n:8,boundaryPoints:[[-.13,0,0],[-.03,0,0]]});
+assert.ok(Math.abs(estimate.volume-3.48)<.2);assert.equal(estimate.boundarySamples,2);assert.ok(Math.abs(estimate.max-.1)<1e-8);

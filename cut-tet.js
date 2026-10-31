@@ -38,3 +38,11 @@ if(typeof module!=='undefined'){module.exports=buildCutTetMesh;module.exports.in
 
 // Sample the existing TPMS field, retaining signed values (not center voxel labels).
 function sampleLevelset(p,o,notify=()=>{}){let n=o.n,values=new Float64Array((n+1)**3),i=0;for(let z=0;z<=n;z++){notify(`采样 TPMS 隐式函数 ${z}/${n}`);for(let y=0;y<=n;y++)for(let x=0;x<=n;x++)values[i++]=geo(2*x/n-1,2*y/n-1,2*z/n-1,p)[0]}return {n,values}}
+// Diagnostic sampling only; estimates are not rigorous error bounds.
+function estimateTPMSGeometry(p,o,notify=()=>{}){
+ const n=o.n, L=[p.lx,p.ly,p.lz], m=Math.min(96,Math.max(24,3*n)),total=m**3, eps=1e-4;
+ let inside=0;for(let z=0;z<m;z++){if(z%8===0)notify('正在评估几何采样误差 '+z+'/'+m);for(let y=0;y<m;y++)for(let x=0;x<m;x++)if(geo(2*(x+.5)/m-1,2*(y+.5)/m-1,2*(z+.5)/m-1,p)[0]<0)inside++}
+ let errors=[];for(let xyz of o.boundaryPoints){let q=xyz.map((v,i)=>2*v/L[i]);if(q.some(v=>Math.abs(v)>.999999))continue;let f=geo(...q,p)[0],g=[];for(let i=0;i<3;i++){let a=q.slice(),b=q.slice();a[i]+=eps;b[i]-=eps;g.push((geo(...a,p)[0]-geo(...b,p)[0])/(eps*L[i]))}let norm=Math.hypot(...g);if(norm>1e-12&&Number.isFinite(f/norm))errors.push(Math.abs(f/norm))}
+ errors.sort((a,b)=>a-b);const volume=inside/total*L[0]*L[1]*L[2];return {volume,m,inside,total,boundarySamples:errors.length,p95:errors.length?errors[Math.min(errors.length-1,Math.floor(.95*errors.length))]:null,max:errors.length?errors[errors.length-1]:null};
+}
+if(typeof module!=='undefined')module.exports.estimateGeometry=estimateTPMSGeometry;
