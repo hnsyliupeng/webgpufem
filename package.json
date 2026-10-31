@@ -2,7 +2,7 @@
   "name": "tpms-browser-lab",
   "private": true,
   "scripts": {
-    "test": "node tests/voxel-stl.test.js && node tests/cut-tet.test.js && node tests/hierarchical-cut.test.js && node tests/multiregion.test.js && node tests/material-opt.test.cjs && node tests/shell-tet.test.js && node tests/quality-select.test.js && node tests/quality-opt.test.js && node tests/quality-surface.test.js && node tests/topology-opt.test.js && node tests/deep-opt.test.cjs && node tests/mmg-level.test.cjs && node tests/gmsh-surface-gate.test.cjs",
+    "test": "node tests/voxel-stl.test.js && node tests/cut-tet.test.js && node tests/hierarchical-cut.test.js && node tests/multiregion.test.js && node tests/material-opt.test.cjs && node tests/shell-tet.test.js && node tests/quality-select.test.js && node tests/quality-opt.test.js && node tests/quality-surface.test.js && node tests/topology-opt.test.js && node tests/deep-opt.test.cjs && node tests/mmg-level.test.cjs && node tests/gmsh-surface-gate.test.cjs && node tests/wall-sizing.test.js && node tests/interface-probes.test.js && node tests/periodic-slice.test.js",
     "test:gui": "node tests/gui.cjs",
     "test:level-gui": "node tests/gui-level.cjs",
     "test:shell-gui": "node tests/gui-shell.cjs",
@@ -20,7 +20,14 @@
     "test:secondary-gui": "node tests/gui-secondary.cjs",
     "test:simwild-analytic": "${TPMS_PYTHON:-python3} tests/simwild-analytic.py",
     "test:simwild-preflight-gui": "node tests/gui-simwild-preflight.cjs",
-    "test:simwild-custom-gui": "node tests/gui-simwild-custom.cjs"
+    "test:simwild-custom-gui": "node tests/gui-simwild-custom.cjs",
+    "test:app-field-gui": "node tests/gui-app-field-parity.cjs",
+    "test:cgal-implicit-gui": "node tests/gui-cgal-implicit.cjs",
+    "test:cgal-sizing-gui": "node tests/gui-cgal-sizing.cjs",
+    "test:cgal-custom-gui": "node tests/gui-cgal-custom.cjs",
+    "test:periodicity-gui": "node tests/gui-periodicity.cjs",
+    "test:cgal-periodic-gui": "node tests/gui-cgal-periodic.cjs",
+    "test:cgal-cancel-gui": "node tests/gui-cgal-cancel.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.58.2"

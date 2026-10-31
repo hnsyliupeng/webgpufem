@@ -3,3 +3,5 @@ node_modules/
 __pycache__/
 *.pyc
 .venv/
+native/cgal-implicit
+native/cgal-periodic

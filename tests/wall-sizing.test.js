@@ -1,0 +1,3 @@
+const assert=require('node:assert/strict');
+global.geo=(x,y,z,p)=>{let a=x,b=y;return [Math.abs(a)-p.s,Math.abs(b)-p.t,100,0,0,a,Math.abs(b),0,p.t,0,0,0,p.s,b]};
+const {estimateAppWallSizing}=require('../cut-tet.js');const p={form:4,host:0,lx:10,ly:12,lz:14,s:.2,t:.3,s2:.1,layer:0},r=estimateAppWallSizing(p,{n:20});assert.ok(r.results[0].count>0&&r.results[1].count>0);assert.ok(Math.abs(r.results[0].p10-2)<1e-9);assert.ok(Math.abs(r.results[1].p10-3.6)<1e-9);assert.equal(r.results[2].count,0);assert.throws(()=>estimateAppWallSizing({...p,host:1},{n:8}));console.log('App wall width first-order diagnostic test passed');
