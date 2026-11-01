@@ -14,6 +14,11 @@ int main(){
  for(auto f:{std::array<int,3>{1,2,3},{1,2,4},{2,3,4},{3,1,4}})tri(1,f[0],f[1],f[2]);
  for(auto f:{std::array<int,3>{1,2,3},{1,2,5},{2,3,5},{3,1,5}})tri(2,f[0],f[1],f[2]);
  assert((closed.defects().open==std::array<std::size_t,3>{0,0,0}));assert((closed.defects().nonmanifold==std::array<std::size_t,3>{0,0,0}));
+ // Three interface sheets can meet on one legitimate triple junction:
+ // the union has 3 incident faces, while each material sees exactly 2.
+ PeriodicBoundaryEdges junction;auto edge=periodicEdge(20,{0,0,0},21,{0,0,0});
+ for(auto pair:{std::pair<int,int>{1,2},{2,3},{3,1}}){junction.add(edge,pair.first);junction.add(edge,pair.second);}
+ assert((junction.defects().open==std::array<std::size_t,3>{0,0,0}));assert((junction.defects().nonmanifold==std::array<std::size_t,3>{0,0,0}));
  BoundaryEdgeDefects previous{{1,2,0},{2,0,0}},better{{1,1,0},{1,0,0}},worse{{0,1,0},{3,0,0}};
  assert(boundaryNonWorsening(previous,better));assert(!boundaryNonWorsening(previous,worse));
  std::cout<<"Periodic material boundary edge audit passed\n";

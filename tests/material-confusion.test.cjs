@@ -1,0 +1,2 @@
+const {spawnSync}=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
+const exe=path.join(os.tmpdir(),`tpms-material-confusion-${process.pid}`);try{let c=spawnSync(process.env.CXX||'g++',['-std=c++17','-O2','tests/material-confusion.test.cpp','-o',exe],{encoding:'utf8'});assert.equal(c.status,0,c.stderr||c.error?.message);let r=spawnSync(exe,[],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);process.stdout.write(r.stdout)}finally{fs.rmSync(exe,{force:true})}
