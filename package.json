@@ -30,6 +30,7 @@
     "test:cgal-cancel-gui": "node tests/gui-cgal-cancel.cjs",
     "test:shared-face": "node tests/shared-periodic-face.test.cjs",
     "test:periodic-quality-gate": "node tests/periodic-quality-gate.test.cjs",
+    "test:tet-quality-score": "node tests/tet-quality-score.test.cjs",
     "test:cgal-periodic-limit-gui": "node tests/gui-cgal-periodic-limit.cjs"
   },
   "devDependencies": {
