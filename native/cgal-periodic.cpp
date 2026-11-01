@@ -15,6 +15,16 @@
 #include "periodic-edge-audit.hpp"
 #include "material-ring-probe.hpp"
 #include "material-confusion.hpp"
+#if defined(TPMS_ADAPTIVE_SIZE_PROBE) && (defined(TPMS_MULTICROSS_PROBE) || defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE))
+#error "Run adaptive sizing independently from other experimental probes"
+#endif
+#if defined(TPMS_ADAPTIVE_TIGHT_PROBE) && !defined(TPMS_ADAPTIVE_SIZE_PROBE)
+#error "Tight adaptive sizing requires TPMS_ADAPTIVE_SIZE_PROBE"
+#endif
+#ifdef TPMS_ADAPTIVE_SIZE_PROBE
+#include "adaptive-cell-size.hpp"
+#include <memory>
+#endif
 #if defined(TPMS_SAME_ENDPOINT_ONLY) && !defined(TPMS_MULTICROSS_PROBE)
 #error "Same-endpoint experiment requires TPMS_MULTICROSS_PROBE"
 #endif
@@ -43,6 +53,23 @@ using Tr=CGAL::Periodic_3_mesh_triangulation_3<Domain>::type;
 using Mesh=CGAL::Mesh_complex_3_in_triangulation_3<Tr>;
 using Criteria=CGAL::Mesh_criteria_3<Tr>;
 namespace prm=CGAL::parameters;
+#ifdef TPMS_ADAPTIVE_SIZE_PROBE
+struct AdaptiveCounters{std::size_t calls=0;double minSize=1,maxSize=0;};
+struct AdaptiveSizeField{
+ const AppGeometry* geometry;double nx,ny,nz,maximum;std::shared_ptr<AdaptiveCounters> stats;
+ K::FT operator()(const Tr::Bare_point& p,int,const Tr::Vertex::Index&)const{
+  std::array<double,3> pos{p.x(),p.y(),p.z()};auto fields=[&](std::array<double,3> a){for(auto&v:a)v-=std::floor(v);return geometry->fields(-1+2*a[0]/nx,-1+2*a[1]/ny,-1+2*a[2]/nz);};
+  double distance=localInterfaceDistance(pos,.001,fields);
+#ifdef TPMS_ADAPTIVE_TIGHT_PROBE
+  double h=adaptiveCellRadius(maximum,distance,.125);
+#else
+  double h=adaptiveCellRadius(maximum,distance);
+#endif
+  if(!(h>0))throw std::runtime_error("自适应尺寸场无效");stats->calls++;stats->minSize=std::min(stats->minSize,h);stats->maxSize=std::max(stats->maxSize,h);return h;
+ }
+};
+#endif
+
 std::string quote(const std::string&s){std::string out;for(unsigned char c:s){if(c=='\\'||c=='"')out+='\\';if(c>=32)out+=char(c);}return out;}
 struct SlicePolygon{int material;std::vector<std::array<double,2>> points;double jac=0,aspect=0;};
 struct Stats{double jac=1,aspect=0,volume[4]={},count[4]={};size_t crossing=0,qualityBad[3]={},qualityTotal[3]={},failureTypes[3]={};std::vector<SlicePolygon> slice;};
@@ -137,14 +164,19 @@ double cellMinRadius=0;
 #ifdef TPMS_QUALITY_REFINEMENT_MIN_SIZE
  cellMinRadius=2.0; // millimetres; experimental bypass of refinement for small cells
 #endif
+#ifdef TPMS_ADAPTIVE_SIZE_PROBE
+ auto adaptiveStats=std::make_shared<AdaptiveCounters>();AdaptiveSizeField sizing{&g,p.nx,p.ny,p.nz,size/cell,adaptiveStats};
+ Criteria criteria(prm::facet_angle(25).facet_size(size/cell).facet_distance(eps/cell).cell_radius_edge_ratio(ratio).cell_size(sizing).cell_min_size(cellMinRadius/cell));
+#else
  Criteria criteria(prm::facet_angle(25).facet_size(size/cell).facet_distance(eps/cell).cell_radius_edge_ratio(ratio).cell_size(size/cell).cell_min_size(cellMinRadius/cell));
+#endif
 #ifdef TPMS_QUALITY_REFINEMENT_PROBE
  criteria.add_cell_criterion(new RefineByQuality<Tr,Criteria::Cell_criteria::Visitor>());
 #endif
  #if defined(TPMS_MANIFOLD_PROBE) && defined(TPMS_QUALITY_REFINEMENT_PROBE)
 #error "Run experimental probes independently"
 #endif
-#if defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE) || defined(TPMS_MULTICROSS_PROBE)
+#if defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE) || defined(TPMS_MULTICROSS_PROBE) || defined(TPMS_ADAPTIVE_SIZE_PROBE)
  constexpr std::size_t vertexLimit=100000;
 #else
  constexpr std::size_t vertexLimit=270000;
@@ -165,7 +197,9 @@ double cellMinRadius=0;
  if(optTime>0){for(int i=0;i<cycles;i++){std::cout<<"@event@{\"progress\":\"周期单胞扰动第 "<<(i+1)<<" 轮，逐轮核对单元质量与材料体积…\"}"<<std::endl;perturbAttempts++;if(stage(0))perturbAccepted++;else break;}if(exude){std::cout<<"@event@{\"progress\":\"执行周期薄片消除并检查质量…\"}"<<std::endl;exudeAccepted=stage(1);}}
  n=mesh.number_of_cells_in_complex();std::cout<<"@event@{\"progress\":\"核查多材料公共面、周期共节点和界面两侧标签…\"}"<<std::endl;auto interfaces=auditInterfaces(mesh,cell,field);std::cout<<"@event@{\"progress\":\"检查各材料周期边界的边邻接…\"}"<<std::endl;auto boundary=auditBoundaryEdges(mesh,true);auto rings=auditNonmanifoldRings(mesh,boundary,cell,field);std::cout<<"@event@{\"progress\":\"对照原始材料场与周期网格的三维采样…\"}"<<std::endl;auto volumeSamples=auditVolumeSamples(mesh,field);
  double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-#ifdef TPMS_MULTICROSS_PROBE
+#ifdef TPMS_ADAPTIVE_SIZE_PROBE
+ std::cout<<std::setprecision(12)<<"@event@{\"result\":{\"probe\":\"自适应尺寸隔离试验，结果未通过验收\",\"adaptiveSizing\":{\"calls\":"<<adaptiveStats->calls<<",\"minMM\":"<<adaptiveStats->minSize*cell<<",\"maxMM\":"<<adaptiveStats->maxSize*cell<<"},\"cells\":"<<n;
+#elif defined(TPMS_MULTICROSS_PROBE)
  std::cout<<std::setprecision(12)<<"@event@{\"result\":{\"probe\":\"多交叉界面隔离试验，结果未通过验收\",\"crossingScans\":"<<domain.scanned<<",\"sameEndpointHits\":"<<domain.sameEndpointHits<<",\"cells\":"<<n;
 #else
  std::cout<<std::setprecision(12)<<"@event@{\"result\":{\"cells\":"<<n;

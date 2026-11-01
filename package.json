@@ -35,6 +35,7 @@
     "test:ring-sectors": "node tests/ring-sectors.test.cjs",
     "test:material-confusion": "node tests/material-confusion.test.cjs",
     "test:sampled-transition": "node tests/sampled-transition.test.cjs",
+    "test:adaptive-cell-size": "node tests/adaptive-cell-size.test.cjs",
     "test:experimental-crossing-domain": "node tests/experimental-crossing-domain.test.cjs",
     "test:cgal-periodic-limit-gui": "node tests/gui-cgal-periodic-limit.cjs"
   },
