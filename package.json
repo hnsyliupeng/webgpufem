@@ -27,7 +27,8 @@
     "test:cgal-custom-gui": "node tests/gui-cgal-custom.cjs",
     "test:periodicity-gui": "node tests/gui-periodicity.cjs",
     "test:cgal-periodic-gui": "node tests/gui-cgal-periodic.cjs",
-    "test:cgal-cancel-gui": "node tests/gui-cgal-cancel.cjs"
+    "test:cgal-cancel-gui": "node tests/gui-cgal-cancel.cjs",
+    "test:shared-face": "node tests/shared-periodic-face.test.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.58.2"
