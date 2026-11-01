@@ -34,5 +34,6 @@ class PeriodicBoundaryEdges {
  public:
  void add(const PeriodicEdgeKey& key,unsigned material){if(material>=1&&material<=3)++edges[key][material];}
  BoundaryEdgeDefects defects()const{BoundaryEdgeDefects out;for(const auto& p:edges)for(unsigned m=1;m<=3;m++){auto n=p.second[m];if(n==1)out.open[m-1]++;else if(n>2)out.nonmanifold[m-1]++;}return out;}
+ template<class F> void forEachNonmanifold(F fn)const{for(const auto& p:edges)for(unsigned m=1;m<=3;m++)if(p.second[m]>2)fn(p.first,m,p.second[m]);}
  std::size_t size()const{return edges.size();}
 };
