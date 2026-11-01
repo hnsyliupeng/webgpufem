@@ -105,8 +105,16 @@ template<class Field> MaterialConfusion auditVolumeSamples(const Mesh& mesh,Fiel
  }
  return out;
 }
+// Stricter radius/edge ratios can substantially increase vertex count and
+// triggered a CGAL surface-insertion assertion at 1.1 in real App data.
+// Keep the tested 1.3 trial in a deliberately isolated build.
+#ifdef TPMS_STRICT_RADIUS_PROBE
+constexpr double minRadiusEdgeRatio=1.3;
+#else
+constexpr double minRadiusEdgeRatio=1.4;
+#endif
 int main(int argc,char**argv){try{
- if(argc!=11)throw std::runtime_error("参数数目错误");double L[]={std::stod(argv[1]),std::stod(argv[2]),std::stod(argv[3])},size=std::stod(argv[4]),eps=std::stod(argv[5]);AppParameters p=AppParameters::read(std::cin);if(p.lx!=L[0]||p.ly!=L[1]||p.lz!=L[2]||p.host!=0||p.grad!=0||p.twist!=0||p.chiral!=0)throw std::runtime_error("模型不满足周期要求");auto whole=[](double v){return std::isfinite(v)&&v>=1&&std::abs(v-std::round(v))<1e-9;};if(!whole(p.nx)||!whole(p.ny)||!whole(p.nz)||!whole(p.r2)||((p.form==2||p.form==3||p.form==5)&&!whole(p.r3)))throw std::runtime_error("周期数不是正整数");double cell=L[0]/p.nx;if(!(cell>0)||std::abs(L[1]/p.ny-cell)>1e-9*cell||std::abs(L[2]/p.nz-cell)>1e-9*cell)throw std::runtime_error("此试验仅支持立方宏观单胞");if(!(size>0&&size<=cell&&eps>0&&eps<=size))throw std::runtime_error("目标尺寸或容差无效");double ratio=std::stod(argv[8]);if(!std::isfinite(ratio)||ratio<1.4||ratio>2)throw std::runtime_error("周期网格半径边长比须为 1.4–2");AppGeometry g(p);long long calls=0;auto field=[&](const K::Point_3&point){double x=point.x()-std::floor(point.x()),y=point.y()-std::floor(point.y()),z=point.z()-std::floor(point.z());if(++calls%5000000==0)std::cout<<"@event@{\"progress\":\"周期单胞已评估 "<<calls<<" 次 App 材料场…\"}"<<std::endl;return g.classify(-1+2*x/p.nx,-1+2*y/p.ny,-1+2*z/p.nz);};K::Iso_cuboid_3 box(0,0,0,1,1,1);Domain domain(field,box,prm::relative_error_bound(std::min(.0001,eps/(2*cell))));double cellMinRadius=0;
+ if(argc!=11)throw std::runtime_error("参数数目错误");double L[]={std::stod(argv[1]),std::stod(argv[2]),std::stod(argv[3])},size=std::stod(argv[4]),eps=std::stod(argv[5]);AppParameters p=AppParameters::read(std::cin);if(p.lx!=L[0]||p.ly!=L[1]||p.lz!=L[2]||p.host!=0||p.grad!=0||p.twist!=0||p.chiral!=0)throw std::runtime_error("模型不满足周期要求");auto whole=[](double v){return std::isfinite(v)&&v>=1&&std::abs(v-std::round(v))<1e-9;};if(!whole(p.nx)||!whole(p.ny)||!whole(p.nz)||!whole(p.r2)||((p.form==2||p.form==3||p.form==5)&&!whole(p.r3)))throw std::runtime_error("周期数不是正整数");double cell=L[0]/p.nx;if(!(cell>0)||std::abs(L[1]/p.ny-cell)>1e-9*cell||std::abs(L[2]/p.nz-cell)>1e-9*cell)throw std::runtime_error("此试验仅支持立方宏观单胞");if(!(size>0&&size<=cell&&eps>0&&eps<=size))throw std::runtime_error("目标尺寸或容差无效");double ratio=std::stod(argv[8]);if(!std::isfinite(ratio)||ratio<minRadiusEdgeRatio||ratio>2)throw std::runtime_error("周期网格半径边长比超出此构建的试验范围");AppGeometry g(p);long long calls=0;auto field=[&](const K::Point_3&point){double x=point.x()-std::floor(point.x()),y=point.y()-std::floor(point.y()),z=point.z()-std::floor(point.z());if(++calls%5000000==0)std::cout<<"@event@{\"progress\":\"周期单胞已评估 "<<calls<<" 次 App 材料场…\"}"<<std::endl;return g.classify(-1+2*x/p.nx,-1+2*y/p.ny,-1+2*z/p.nz);};K::Iso_cuboid_3 box(0,0,0,1,1,1);Domain domain(field,box,prm::relative_error_bound(std::min(.0001,eps/(2*cell))));double cellMinRadius=0;
 #if defined(TPMS_QUALITY_REFINEMENT_MIN_SIZE) && !defined(TPMS_QUALITY_REFINEMENT_PROBE)
 #error "The minimum-radius experiment requires the isolated quality refinement probe"
 #endif
@@ -120,7 +128,7 @@ int main(int argc,char**argv){try{
  #if defined(TPMS_MANIFOLD_PROBE) && defined(TPMS_QUALITY_REFINEMENT_PROBE)
 #error "Run experimental probes independently"
 #endif
-#if defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE)
+#if defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE)
  constexpr std::size_t vertexLimit=100000;
 #else
  constexpr std::size_t vertexLimit=270000;
