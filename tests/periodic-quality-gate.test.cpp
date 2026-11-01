@@ -3,6 +3,10 @@
 #include <iostream>
 int main(){
  assert(qualityDistributionNonWorsening(50,100,40,100));
+ assert(qualityDistributionImproved(50,100,40,100));
+ assert(qualityDistributionImproved(50,100,50,101));
+ assert(!qualityDistributionImproved(50,100,50,100));
+ assert(!qualityDistributionImproved(50,100,49,90));
  assert(qualityDistributionNonWorsening(50,100,50,100));
  assert(!qualityDistributionNonWorsening(50,100,51,200));
  assert(!qualityDistributionNonWorsening(50,100,49,90));
