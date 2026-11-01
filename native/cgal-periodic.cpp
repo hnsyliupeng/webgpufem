@@ -15,6 +15,12 @@
 #include "periodic-edge-audit.hpp"
 #include "material-ring-probe.hpp"
 #include "material-confusion.hpp"
+#if defined(TPMS_BOX_CLIP_PROBE) && (defined(TPMS_MULTICROSS_PROBE) || defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE) || defined(TPMS_ADAPTIVE_SIZE_PROBE) || defined(TPMS_SEEDED_DOMAIN_PROBE))
+#error "Run box clipping independently from other experimental probes"
+#endif
+#ifdef TPMS_BOX_CLIP_PROBE
+#include "experimental-periodic-box.hpp"
+#endif
 #if defined(TPMS_SEEDED_DOMAIN_PROBE) && (defined(TPMS_MULTICROSS_PROBE) || defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE) || defined(TPMS_ADAPTIVE_SIZE_PROBE))
 #error "Run interface seeding independently from other experimental probes"
 #endif
@@ -184,7 +190,7 @@ double cellMinRadius=0;
  #if defined(TPMS_MANIFOLD_PROBE) && defined(TPMS_QUALITY_REFINEMENT_PROBE)
 #error "Run experimental probes independently"
 #endif
-#if defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE) || defined(TPMS_MULTICROSS_PROBE) || defined(TPMS_ADAPTIVE_SIZE_PROBE) || defined(TPMS_SEEDED_DOMAIN_PROBE)
+#if defined(TPMS_QUALITY_REFINEMENT_PROBE) || defined(TPMS_MANIFOLD_PROBE) || defined(TPMS_STRICT_RADIUS_PROBE) || defined(TPMS_MULTICROSS_PROBE) || defined(TPMS_ADAPTIVE_SIZE_PROBE) || defined(TPMS_SEEDED_DOMAIN_PROBE) || defined(TPMS_BOX_CLIP_PROBE)
  constexpr std::size_t vertexLimit=100000;
 #else
  constexpr std::size_t vertexLimit=270000;
@@ -204,8 +210,14 @@ double cellMinRadius=0;
  size_t oldBad=0,newBad=0,oldTotal=0,newTotal=0;for(int i=0;i<3;i++){oldBad+=current.qualityBad[i];newBad+=after.qualityBad[i];oldTotal+=current.qualityTotal[i];newTotal+=after.qualityTotal[i];}if(!qualityDistributionNonWorsening(oldBad,oldTotal,newBad,newTotal)||!(after.jac>current.jac+1e-10||after.aspect<current.aspect-1e-8||qualityDistributionImproved(oldBad,oldTotal,newBad,newTotal)||topologyProgress||geometryProgress))good=false;history.push_back({kind,good,valid,oldJac,after.jac,oldAspect,after.aspect,oldBad,newBad,oldTotal,newTotal,boundaryChecked,defectTotals(currentBoundary),defectTotals(candidateBoundary),geometryChecked,currentGeometry.total()-currentGeometry.matches(),candidateGeometry.total()-candidateGeometry.matches(),materialConfusionWorsenedKinds(currentGeometry,candidateGeometry)});if(good){current=after;currentBoundary=candidateBoundary;currentGeometry=candidateGeometry;accepted=true;}else mesh=std::move(snapshot);return good;};
  if(optTime>0){for(int i=0;i<cycles;i++){std::cout<<"@event@{\"progress\":\"周期单胞扰动第 "<<(i+1)<<" 轮，逐轮核对单元质量与材料体积…\"}"<<std::endl;perturbAttempts++;if(stage(0))perturbAccepted++;else break;}if(exude){std::cout<<"@event@{\"progress\":\"执行周期薄片消除并检查质量…\"}"<<std::endl;exudeAccepted=stage(1);}}
  n=mesh.number_of_cells_in_complex();std::cout<<"@event@{\"progress\":\"核查多材料公共面、周期共节点和界面两侧标签…\"}"<<std::endl;auto interfaces=auditInterfaces(mesh,cell,field);std::cout<<"@event@{\"progress\":\"检查各材料周期边界的边邻接…\"}"<<std::endl;auto boundary=auditBoundaryEdges(mesh,true);auto rings=auditNonmanifoldRings(mesh,boundary,cell,field);std::cout<<"@event@{\"progress\":\"对照原始材料场与周期网格的三维采样…\"}"<<std::endl;auto volumeSamples=auditVolumeSamples(mesh,field);
+#ifdef TPMS_BOX_CLIP_PROBE
+ std::cout<<"@event@{\"progress\":\"隔离试验：构造共节点有限单胞盒并检查质量…\"}"<<std::endl;
+ boxclip::Mesh finiteBox;try{finiteBox=experimentalPeriodicBox(mesh);}catch(const std::exception& e){throw std::runtime_error(std::string("有限盒共节点裁剪失败：")+e.what());}std::size_t boxBad=0;double boxVolume[4]={};for(auto &t:finiteBox.cells){std::array<std::array<double,3>,4> v;for(int i=0;i<4;i++)v[i]=finiteBox.points[t.v[i]];if(tetQualityScore(v)<=1)boxBad++;boxVolume[t.material]+=boxclip::det(v[0],v[1],v[2],v[3])*cell*cell*cell/6.;}for(int i=1;i<=3;i++)if(std::abs(boxVolume[i]-current.volume[i])>std::max(1e-7,1e-7*current.volume[i]))throw std::runtime_error("周期盒裁剪后材料体积不守恒");
+#endif
  double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-#ifdef TPMS_SEEDED_DOMAIN_PROBE
+#ifdef TPMS_BOX_CLIP_PROBE
+ std::cout<<std::setprecision(12)<<"@event@{\"result\":{\"probe\":\"周期盒裁剪隔离试验，结果未通过验收\",\"boxClip\":{\"allocatedNodes\":"<<finiteBox.points.size()<<",\"cells\":"<<finiteBox.cells.size()<<",\"bad\":"<<boxBad<<",\"volumes\":["<<boxVolume[1]<<','<<boxVolume[2]<<','<<boxVolume[3]<<"]},\"cells\":"<<n;
+#elif defined(TPMS_SEEDED_DOMAIN_PROBE)
  std::cout<<std::setprecision(12)<<"@event@{\"result\":{\"probe\":\"界面种子隔离试验，结果未通过验收\",\"extraSeeds\":"<<domain.extraSeeds<<",\"cells\":"<<n;
 #elif defined(TPMS_ADAPTIVE_SIZE_PROBE)
  std::cout<<std::setprecision(12)<<"@event@{\"result\":{\"probe\":\"自适应尺寸隔离试验，结果未通过验收\",\"adaptiveSizing\":{\"calls\":"<<adaptiveStats->calls<<",\"minMM\":"<<adaptiveStats->minSize*cell<<",\"maxMM\":"<<adaptiveStats->maxSize*cell<<"},\"cells\":"<<n;

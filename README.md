@@ -2,6 +2,10 @@
 
 基于用户提供的 `TPMS-standalone-v18.txt`，入口为 `index.html`。无需构建：在本目录运行 `python3 -m http.server 8000`，用支持 WebGL 2 的浏览器访问 `http://localhost:8000/`。也可将整个目录部署为静态网站。请同时保留 `voxel-stl.js`、`cut-tet.js`、`mmg-worker.js`、`mmg-level-worker.js`、`quality-opt.js`、`quality-opt-worker.js`、`quality-surface.js`、`quality-surface-worker.js` 和 `vendor/mmg`。
 
+## 底层网格架构
+
+多级材料、共节点、有限盒裁剪与验收的架构分析和本轮原型限制见 [docs/MESH_ARCHITECTURE.md](docs/MESH_ARCHITECTURE.md)。当前仍未生成或验证可求解的完整多级有限盒网格。
+
 ## 现有功能及边界
 
 - 原文件提供一至三级 TPMS 几何预览、剖面、参数检查、八叉树界面细分预览及简单质量指标。八叉树有悬挂节点，不是求解网格；2:1 平衡只是细分粗单元，不是通用网格修复。

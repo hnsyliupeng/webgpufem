@@ -36,6 +36,8 @@
     "test:material-confusion": "node tests/material-confusion.test.cjs",
     "test:sampled-transition": "node tests/sampled-transition.test.cjs",
     "test:adaptive-cell-size": "node tests/adaptive-cell-size.test.cjs",
+    "test:conforming-box-clip": "node tests/conforming-box-clip.test.cjs",
+    "test:cgal-box-clip-gui": "node tests/gui-cgal-box-clip.cjs",
     "test:experimental-interface-seeds": "node tests/experimental-interface-seeds.test.cjs",
     "test:experimental-seeded-domain": "node tests/experimental-seeded-domain.test.cjs",
     "test:experimental-crossing-domain": "node tests/experimental-crossing-domain.test.cjs",
