@@ -39,8 +39,24 @@ window.addEventListener('unhandledrejection', function (e) {
       <button id="btnStatics">求静力</button>
       <button id="btnDyn">时域动力</button>
       <button id="btnStop" disabled>停止</button>
+      <button id="btnVerify" title="在浏览器内完整重跑本算例的全部校核项">🧪 重跑校核</button>
       <div id="prog"></div>
     </div>
+    <div class="runbox">
+      <button id="btnJson" title="DAVE 风格 JSON 场景">⬇ JSON</button>
+      <button id="btnYaml" title="OrcaFlex 风格 YAML">⬇ YAML</button>
+      <button id="btnPy" title="DAVE 风格 Python 建模脚本">⬇ .py</button>
+      <button id="btnShot" title="保存当前 3D 画面为 PNG">🖼 画面</button>
+    </div>
+    <div id="liveresult"></div>
+    <h2>场景树</h2>
+    <div id="tree" class="tree"></div>
+    <h2>检查器</h2>
+    <div id="inspector" class="insp dim">点击左侧场景树，或直接点击 3D 视图中的对象</div>
+    <h2>环境调节 <span style="font-size:10px;color:#8ea0c2">(滑动实时生效，重算静力请点“求静力”)</span></h2>
+    <div id="envctl"></div>
+    <h2>绞车 L0</h2>
+    <div id="winchctl"></div>
     <div id="exdesc"></div>
   </aside>
   <section id="center">
@@ -49,6 +65,10 @@ window.addEventListener('unhandledrejection', function (e) {
       <input id="scrub" type="range" min="0" max="0" value="0" step="1">
       <span id="tlabel">t = 0.00 s</span>
       <button id="btnPlay">▶ 播放</button>
+      <select id="speed" title="播放速度">
+        <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+      </select>
     </div>
     <canvas id="chart"></canvas>
   </section>
@@ -66,7 +86,7 @@ window.addEventListener('unhandledrejection', function (e) {
   </aside>
 </main>
 <footer>
-  <span>10 个验证算例全部 PASS（见右侧“验证”）· 截图见 screenshots/ · Word 文档见 docs/ · 运行: <code>npm run verify</code> / <code>npm run serve</code></span>
+  <span>10 个验证算例全部 PASS（右侧“✔🖼 验证截图”内嵌截图）· 截图见 screenshots/ · Word 文档见 docs/ · 运行: <code>npm run verify</code> / <code>npm run serve</code> · 3D 视图可点击拾取对象</span>
 </footer>
 <script type="module" src="./app/app.js"></script>
 </body>

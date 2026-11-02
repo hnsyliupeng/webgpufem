@@ -129,6 +129,7 @@ export const DOC_SECTIONS = [
       { h: '9.1 本地运行', level: 2, body: [
         { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 10 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
         { t: 'p', s: 'App 完全离线运行：3D 视图、算例仿真、验证表、文档、流程图、下载面板均为本地模块，无任何外部请求。' },
+        { t: 'ul', items: ['3D 视图可点击拾取对象（船体/缆节点/POI)，左侧场景树同步高亮；无 WebGL 时自动回退显示软件渲染截图', '左侧面板：场景树(Scene DAG)、属性检查器(实时 q/张力/残差)、环境滑杆(波高/周期/波向/海流/风速)、绞车 L0 滑杆', '导出按钮：模型 JSON(DAVE 式)/OrcaFlex YAML/DAVE py/当前画面 PNG；URL 参数 ?ex=ex07 直达算例', '“🧪 重跑校核”按钮在浏览器内以与 runner 相同的参数重跑该算例全部校核项并显示 PASS/FAIL', '底部时序图图例可点击显示/隐藏对应通道；播放支持 0.25–4× 速度与时间 scrubber'] },
       ] },
       { h: '9.2 生成 Word 实现文档', level: 2, body: [
         { t: 'code', s: 'pip install python-docx pillow\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG）' },

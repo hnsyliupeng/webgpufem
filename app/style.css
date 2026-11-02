@@ -61,3 +61,22 @@ table.v td:first-child, table.v th:first-child { text-align: left; }
 .dl .grp { color: #fff; font-weight: 600; margin: 8px 0 2px; font-size: 12.5px; }
 footer { padding: 6px 16px; color: var(--dim); font-size: 11.5px; background: var(--panel); border-top: 1px solid var(--line); }
 footer code { background: #0a1120; padding: 1px 5px; border-radius: 4px; }
+
+/* --- deepened panels: tree / inspector / env sliders --- */
+.tree { font-size: 12px; max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px; background: var(--panel2); }
+.tnode { padding: 1px 2px; }
+.tnode .tw { cursor: pointer; color: #c7d5ee; border-radius: 4px; display: inline-block; padding: 0 4px; }
+.tnode .tw:hover { background: #1b2a47; }
+.tnode.sel > .tw { background: #1d4ed8; color: #fff; }
+.tchild { margin-left: 14px; border-left: 1px dashed var(--line); padding-left: 4px; }
+.insp { font-size: 11.5px; border: 1px solid var(--line); border-radius: 8px; padding: 6px; background: var(--panel2); max-height: 240px; overflow-y: auto; }
+.insp table { border-collapse: collapse; width: 100%; }
+.insp td { border-bottom: 1px dashed var(--line); padding: 2px 4px; vertical-align: top; }
+.insp td.k { color: var(--dim); white-space: nowrap; width: 40%; }
+.dim { color: var(--dim); }
+.sliderow { display: grid; grid-template-columns: 86px 1fr 52px; gap: 6px; align-items: center; font-size: 11.5px; margin: 3px 0; }
+.sliderow input { width: 100%; accent-color: #1d4ed8; }
+.sliderow b { color: var(--acc); font-weight: 600; text-align: right; }
+#liveresult { margin: 6px 0; }
+#liveresult .exblock { font-size: 11.5px; }
+select { background: var(--panel2); color: var(--txt); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font-size: 12px; }
