@@ -7,7 +7,7 @@
     "verify": "node tools/run_examples.mjs",
     "shots": "node tools/run_examples.mjs --shots-only",
     "docs": "python3 tools/build_docs.py",
-    "serve": "python3 -m http.server 8000 --bind 0.0.0.0"
+    "serve": "node tools/serve.mjs 8000"
   },
   "dependencies": {
     "pngjs": "^7.0.0"

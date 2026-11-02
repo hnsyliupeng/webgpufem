@@ -541,7 +541,7 @@ const DL = [
   ['入口与 App', ['index.html', 'app/app.js', 'app/style.css', 'app/verification_data.js']],
   ['核心库 core/', ['core/math.js', 'core/waves.js', 'core/env.js', 'core/catenary.js', 'core/line.js', 'core/vessel.js', 'core/scene.js', 'core/solvers.js', 'core/post.js', 'core/render_scene.js', 'core/flowcharts.js']],
   ['算例 examples/', ['examples/index.js']],
-  ['工具 tools/', ['tools/run_examples.mjs', 'tools/raster.mjs', 'tools/smoke.mjs', 'tools/export_docs.mjs', 'tools/build_docs.py', 'tools/make_overview.mjs', 'tools/wheels/python_docx-1.2.0-py3-none-any.whl']],
+  ['工具 tools/', ['tools/serve.mjs', 'tools/run_examples.mjs', 'tools/raster.mjs', 'tools/smoke.mjs', 'tools/export_docs.mjs', 'tools/build_docs.py', 'tools/make_overview.mjs', 'tools/wheels/python_docx-1.2.0-py3-none-any.whl']],
   ['文档 docs/', ['docs/doc_data.js', 'docs/verification_report.md', 'docs/verification_report.html', 'docs/OrcaFlex_DAVE_实现文档.docx', 'docs/flowcharts.json', 'docs/doc_data.json']],
   ['截图 screenshots/', [...Array.from({ length: 10 }, (_, i) => `screenshots/ex${String(i + 1).padStart(2, '0')}.png`), 'screenshots/verification_overview.png']],
   ['其他', ['README.md', 'package.json', '.gitignore', 'vendor/three.module.js', 'vendor/three.core.js', 'vendor/OrbitControls.js', 'vendor/Line2.js', 'vendor/LineGeometry.js', 'vendor/LineMaterial.js', 'vendor/LineSegments2.js', 'vendor/LineSegmentsGeometry.js', 'vendor/BufferGeometryUtils.js']],

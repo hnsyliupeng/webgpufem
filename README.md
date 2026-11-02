@@ -9,7 +9,7 @@
 ```bash
 git clone <本仓库> && cd webgpufem
 npm install            # 仅 three + pngjs（已 vendored 在 vendor/，可省略）
-npm run serve          # 本地静态服务器 → 浏览器打开 http://localhost:8000
+npm run serve          # 静态服务器(恒带 no-store 防缓存) → 浏览器打开 http://localhost:8000
 npm run verify         # 运行全部 10 个算例：程序化 PASS/FAIL + 1280×800 截图 + 报告
 node tools/smoke.mjs   # 快速冒烟测试（秒级）
 npm run docs           # 生成 Word 实现文档 docs/OrcaFlex_DAVE_实现文档.docx
