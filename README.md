@@ -44,7 +44,13 @@ App（`index.html`）打开即用，**无任何网络请求**：3D 视图（thre
 | ex09 | Lazy-wave 立管静力 touchdown/顶张力 vs 解析 | S-型立管 |
 | ex10 | JONSWAP：m0=Hs²/16、η≈Hs/4、雨流+Miner | 波浪谱离散 + 疲劳 |
 
-每个算例：`node tools/run_examples.mjs <exId>` 单独运行，输出 PASS/FAIL 表、`screenshots/exXX.png`、并汇总进 `app/verification_data.js` 与 `docs/verification_report.{md,html}`（App 内“✔ 验证”页卡可直接查看）。
+每个算例：`node tools/run_examples.mjs <exId>` 单独运行（子集运行会与已有结果合并，不会覆盖），输出 PASS/FAIL 表、`screenshots/exXX.png`、并汇总进 `app/verification_data.js` 与 `docs/verification_report.{md,html}`。
+
+**可视化验证证据**：
+- `screenshots/ex01–ex10.png` —— 每个算例的软件渲染场景截图（张力着色）
+- `screenshots/verification_overview.png` —— 10 张截图 + PASS 徽章的总览拼图（`node tools/make_overview.mjs` 生成）
+- App 内“✔🖼 验证截图”页卡直接嵌入全部截图与 PASS/FAIL 表；`docs/verification_report.html` 同样内嵌截图
+- 若浏览器无 WebGL，App 自动回退为显示对应算例的验证截图，并会在页面头部显示“内核自检 PASS”徽章
 
 ## Word 实现文档
 

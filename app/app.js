@@ -15,8 +15,30 @@ const $ = (s) => document.querySelector(s);
 
 // ---------------- 3D view ----------------
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+let renderer = null;
+let webglOK = true;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+} catch (e) { webglOK = false; console.warn('WebGL unavailable — falling back to rendered screenshot view', e); }
+// fallback: draw the example's software-rendered verification screenshot on a 2D canvas
+const shotImgs = {};
+function loadShot(id) { if (!shotImgs[id]) { const im = new Image(); im.src = `screenshots/${id}.png`; shotImgs[id] = im; im.onload = fallbackDraw; } }
+function fallbackDraw() {
+  if (webglOK || !curEx) return;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#060b16'; ctx.fillRect(0, 0, w, h);
+  const img = shotImgs[curEx.id];
+  if (img && img.complete && img.naturalWidth) {
+    const sc = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    ctx.drawImage(img, (w - img.naturalWidth * sc) / 2, (h - img.naturalHeight * sc) / 2, img.naturalWidth * sc, img.naturalHeight * sc);
+  }
+  ctx.fillStyle = '#8ea0c2'; ctx.font = '13px sans-serif';
+  ctx.fillText(`${curEx.id} 验证截图（当前环境无 WebGL，显示软件渲染结果；本地浏览器中为实时 3D)`, 12, 22);
+}
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060b16);
 scene.fog = new THREE.Fog(0x060b16, 400, 1600);
@@ -31,6 +53,7 @@ const grpModel = new THREE.Group(); scene.add(grpModel);   // lines + bodies + p
 let waterMesh = null, bedMesh = null;
 
 function resize() {
+  if (!renderer) return;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== w * devicePixelRatio || canvas.height !== h * devicePixelRatio) {
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -253,7 +276,8 @@ function selectExample(id) {
   curEx = getExample(id);
   document.querySelectorAll('.exitem').forEach(e => e.classList.toggle('on', e.dataset.id === id));
   $('#exdesc').textContent = curEx.desc + (curEx.analysis.kind === 'dynamics' ? '\n\n点击“时域动力”观看实时仿真（GUI 演示取前 30 s；完整验证: npm run verify）。' : '');
-  startExample(curEx, curEx.analysis.kind === 'dynamics' ? 'statics' : 'statics');
+  loadShot(curEx.id);
+  startExample(curEx, 'statics');
 }
 $('#btnStatics').onclick = () => curEx && startExample(curEx, 'statics');
 $('#btnDyn').onclick = () => curEx && curEx.analysis.kind === 'dynamics' && startExample(curEx, 'dyn');
@@ -262,11 +286,11 @@ $('#btnDyn').onclick = () => curEx && curEx.analysis.kind === 'dynamics' && star
 function fmt(x) { if (x === null || x === undefined) return '—'; if (typeof x !== 'number') return String(x); if (Math.abs(x) >= 1e5 || (Math.abs(x) < 1e-3 && x !== 0)) return x.toExponential(3); return x.toFixed(4); }
 function buildVerify() {
   const el = $('#tab-verify');
-  let html = `<div class="exblock"><h3>汇总</h3><p>${VERIFICATION.allPass ? '<span class="pass">全部 10 个算例 PASS</span>' : '<span class="fail">存在失败</span>'} · 生成时间 ${VERIFICATION.generated} · 运行器 <code>node tools/run_examples.mjs</code></p></div>`;
+  let html = `<div class="exblock"><h3>汇总</h3><p>${VERIFICATION.allPass ? '<span class="pass">全部 10 个算例 PASS</span>' : '<span class="fail">存在失败</span>'} · 生成时间 ${VERIFICATION.generated} · 运行器 <code>node tools/run_examples.mjs</code></p><img src="screenshots/verification_overview.png" style="width:100%;border-radius:8px" alt="verification overview"></div>`;
   for (const r of VERIFICATION.results) {
     html += `<div class="exblock"><h3>${r.id} ${r.name}</h3><table class="v"><tr><th>校核项</th><th>期望</th><th>实际</th><th>单位</th><th>结果</th></tr>`;
     for (const c of r.checks) html += `<tr><td>${c.name}</td><td>${fmt(c.expected)}</td><td>${fmt(c.actual)}</td><td>${c.unit || ''}</td><td class="${c.pass ? 'pass' : 'fail'}">${c.pass ? 'PASS' : 'FAIL'}</td></tr>`;
-    html += '</table></div>';
+    html += `</table><img src="screenshots/${r.id}.png" style="width:100%;border-radius:8px;margin-top:6px" alt="${r.id}" loading="lazy"></div>`;
   }
   el.innerHTML = html;
 }
@@ -303,9 +327,9 @@ const DL = [
   ['入口与 App', ['index.html', 'app/app.js', 'app/style.css', 'app/verification_data.js']],
   ['核心库 core/', ['core/math.js', 'core/waves.js', 'core/env.js', 'core/catenary.js', 'core/line.js', 'core/vessel.js', 'core/scene.js', 'core/solvers.js', 'core/post.js', 'core/render_scene.js', 'core/flowcharts.js']],
   ['算例 examples/', ['examples/index.js']],
-  ['工具 tools/', ['tools/run_examples.mjs', 'tools/raster.mjs', 'tools/smoke.mjs', 'tools/export_docs.mjs', 'tools/build_docs.py']],
+  ['工具 tools/', ['tools/run_examples.mjs', 'tools/raster.mjs', 'tools/smoke.mjs', 'tools/export_docs.mjs', 'tools/build_docs.py', 'tools/make_overview.mjs', 'tools/wheels/python_docx-1.2.0-py3-none-any.whl']],
   ['文档 docs/', ['docs/doc_data.js', 'docs/verification_report.md', 'docs/verification_report.html', 'docs/OrcaFlex_DAVE_实现文档.docx', 'docs/flowcharts.json', 'docs/doc_data.json']],
-  ['截图 screenshots/', Array.from({ length: 10 }, (_, i) => `screenshots/ex${String(i + 1).padStart(2, '0')}.png`)],
+  ['截图 screenshots/', [...Array.from({ length: 10 }, (_, i) => `screenshots/ex${String(i + 1).padStart(2, '0')}.png`), 'screenshots/verification_overview.png']],
   ['其他', ['README.md', 'package.json', '.gitignore', 'vendor/three.module.js', 'vendor/OrbitControls.js', 'vendor/Line2.js', 'vendor/LineGeometry.js', 'vendor/LineMaterial.js', 'vendor/LineSegments2.js', 'vendor/LineSegmentsGeometry.js', 'vendor/BufferGeometryUtils.js']],
 ];
 function buildDl() {
@@ -323,4 +347,17 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
 // ---------------- boot ----------------
 buildExList(); buildVerify(); buildDocs(); buildFlow(); buildDl();
 selectExample('ex01');
-(function loop() { resize(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+// in-browser kernel self-check (ex01 statics vs analytic catenary)
+try {
+  const m0 = getExample('ex01').build();
+  const st0 = sv.computeStatics(m0, { tol: 1e-7 });
+  const ok0 = st0.residual < 1e-6;
+  document.querySelector('.badge').textContent = `清洁室实现 · 内核自检 ${ok0 ? 'PASS' : 'FAIL'}（ex01 静力残差 ${st0.residual.toExponential(1)}）`;
+  document.querySelector('.badge').style.color = ok0 ? '#34d399' : '#f87171';
+} catch (e) {
+  document.querySelector('.badge').textContent = '内核自检异常: ' + e.message;
+}
+(function loop() {
+  if (renderer) { resize(); renderer.render(scene, camera); } else fallbackDraw();
+  requestAnimationFrame(loop);
+})();
