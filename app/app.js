@@ -247,6 +247,12 @@ function snapshotOf(model, t) {
 
 function tick() {
   if (!sim || sim.dead) return;
+  try { tickInner(); } catch (e) { console.error('tick error (skipped frame):', e); }
+  if (sim && !sim.dead && sim.t < sim.tEnd) requestAnimationFrame(tick);
+  else if (sim) { $('#prog').textContent += ' · 完成'; $('#btnStop').disabled = true; }
+}
+function tickInner() {
+  if (!sim || sim.dead) return;
   const s = sim;
   const adv = 0.06 * (s.speed || 1);
   const n = Math.max(1, Math.round(adv / s.dt));
@@ -269,8 +275,6 @@ function tick() {
   if (!s.playing) { $('#scrub').value = s.snaps.length - 1; $('#tlabel').textContent = `t = ${last.t.toFixed(2)} s`; }
   if (s.frame % 10 === 0) refreshInspector();
   drawChart();
-  if (s.t < s.tEnd) requestAnimationFrame(tick);
-  else { $('#prog').textContent += ' · 完成'; $('#btnStop').disabled = true; }
 }
 
 $('#btnStop').onclick = stopSim;
@@ -568,13 +572,17 @@ try {
   const st0 = sv.computeStatics(m0, { tol: 1e-7 });
   const ok0 = st0.residual < 1e-6;
   const badge = document.querySelector('.badge');
-  badge.textContent = `清洁室实现 · 内核自检 ${ok0 ? 'PASS' : 'FAIL'}（ex01 静力残差 ${st0.residual.toExponential(1)}）`;
+  badge.textContent = `v${window.__APP_VERSION || 'dev'} · 清洁室实现 · 内核自检 ${ok0 ? 'PASS' : 'FAIL'}（ex01 静力残差 ${st0.residual.toExponential(1)}）`;
   badge.style.color = ok0 ? '#34d399' : '#f87171';
 } catch (e) {
   document.querySelector('.badge').textContent = '内核自检异常: ' + e.message;
 }
 document.getElementById('bootmsg')?.remove();
+document.title = 'WebGPUFEM v' + (window.__APP_VERSION || 'dev');
+let loopErr = 0;
 (function loop() {
-  if (renderer) { resize(); renderer.render(scene, camera); } else fallbackDraw();
+  try {
+    if (renderer) { resize(); renderer.render(scene, camera); } else fallbackDraw();
+  } catch (e) { if (++loopErr < 5) console.error('render loop error (ignored):', e); }
   requestAnimationFrame(loop);
 })();
