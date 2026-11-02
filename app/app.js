@@ -560,7 +560,8 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
 // ---------------- boot ----------------
 buildExList(); buildVerify(); buildDocs(); buildFlow(); buildDl();
 const qp = new URLSearchParams(location.search);
-selectExample(qp.get('ex') || 'ex01');
+try { selectExample(qp.get('ex') || 'ex01'); }
+catch (e) { console.error('3D render failed (UI still usable):', e); $('#prog').textContent = '3D 渲染异常: ' + e.message; }
 // in-browser kernel self-check (ex01 statics vs analytic catenary)
 try {
   const m0 = getExample('ex01').build();
