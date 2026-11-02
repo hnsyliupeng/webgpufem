@@ -357,6 +357,7 @@ try {
 } catch (e) {
   document.querySelector('.badge').textContent = '内核自检异常: ' + e.message;
 }
+document.getElementById('bootmsg')?.remove(); // boot 完成，移除启动遮罩
 (function loop() {
   if (renderer) { resize(); renderer.render(scene, camera); } else fallbackDraw();
   requestAnimationFrame(loop);

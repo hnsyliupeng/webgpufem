@@ -5,11 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WebGPUFEM — OrcaFlex/DAVE 风格海洋分析 (本地独立运行)</title>
 <link rel="stylesheet" href="./app/style.css">
+<meta http-equiv="Cache-Control" content="no-store">
+<script>
+// 启动遮罩：JS 正常启动后由 app.js 移除；若脚本出错则把错误直接显示在页面上（避免白板）
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('bootmsg');
+  if (d) { d.style.color = '#f87171'; d.style.whiteSpace = 'pre-wrap'; d.style.padding = '20px';
+    d.textContent = '脚本错误: ' + (e.message || e.type) + '\n@ ' + (e.filename || '') + ':' + (e.lineno || 0) + ':' + (e.colno || 0) + '\n请硬刷新 (Ctrl+F5) 或查看控制台'; }
+});
+window.addEventListener('unhandledrejection', function (e) {
+  var d = document.getElementById('bootmsg');
+  if (d) { d.style.color = '#f87171'; d.textContent = 'Promise 异常: ' + (e.reason && e.reason.message || e.reason); }
+});
+</script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/" } }
 </script>
 </head>
 <body>
+<div id="bootmsg" style="position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;background:#0b1220;color:#8ea0c2;font-size:15px">正在加载 WebGPUFEM …</div>
 <header>
   <div>
     <h1>🌊 WebGPUFEM</h1>
