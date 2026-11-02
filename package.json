@@ -1,0 +1,18 @@
+{
+  "name": "webgpufem-orcaflex-dave",
+  "version": "1.0.0",
+  "description": "Browser-based clean-room re-implementation of OrcaFlex/DAVE-style marine analysis (scene graph, lines, vessels, waves, statics/dynamics, verification)",
+  "type": "module",
+  "scripts": {
+    "verify": "node tools/run_examples.mjs",
+    "shots": "node tools/run_examples.mjs --shots-only",
+    "docs": "python3 tools/build_docs.py",
+    "serve": "python3 -m http.server 8000 --bind 0.0.0.0"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "three": "^0.187.0"
+  }
+}

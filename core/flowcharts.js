@@ -1,0 +1,181 @@
+// core/flowcharts.js — flowchart definitions for the app (SVG) and the .docx (PNG via tools/build_docs.py).
+// Clean-room, derived from the public theory doc + our own implementation in core/.
+// Layout coordinates are on an abstract grid; renderers scale to fit.
+
+export const FLOWCHARTS = [
+  {
+    id: 'pipeline',
+    title: '总体计算链（Model → Statics → Dynamics → Post）',
+    nodes: [
+      { id: 'build', x: 0, y: 0, w: 22, h: 9, label: '构建 Model\n(scene DAG + bodies + lines + env)', kind: 'proc' },
+      { id: 'env', x: 0, y: 12, w: 22, h: 8, label: 'Environment\n波浪/海流/风/海床', kind: 'data' },
+      { id: 'statics', x: 30, y: 3, w: 24, h: 9, label: 'computeStatics\nNewton + 数值 Jacobian', kind: 'proc' },
+      { id: 'dyn', x: 62, y: 3, w: 24, h: 9, label: 'runDynamics\n半隐式 Euler 时域推进', kind: 'proc' },
+      { id: 'post', x: 62, y: 15, w: 24, h: 8, label: '后处理 post.js\n统计/雨流/Miner/极值', kind: 'proc' },
+      { id: 'out', x: 92, y: 6, w: 20, h: 9, label: '输出\n通道曲线/快照/校核表/截图', kind: 'data' },
+    ],
+    edges: [
+      { from: 'build', to: 'statics' },
+      { from: 'env', to: 'statics' },
+      { from: 'env', to: 'dyn' },
+      { from: 'statics', to: 'dyn', label: '初始状态' },
+      { from: 'dyn', to: 'post', label: 'series/snapshots' },
+      { from: 'dyn', to: 'out' },
+      { from: 'post', to: 'out' },
+    ],
+  },
+  {
+    id: 'line-forces',
+    title: '线单元力计算 computeForces(t)',
+    nodes: [
+      { id: 'ends', x: 0, y: 0, w: 20, h: 8, label: '端点跟随 attachments\n(fixed / vessel / motion)', kind: 'proc' },
+      { id: 'axial', x: 26, y: 0, w: 24, h: 8, label: '轴向: 弦应变 T=EA·ε\n(受压置 0) + 轴向阻尼', kind: 'proc' },
+      { id: 'bend', x: 26, y: 10, w: 24, h: 8, label: '弯曲: U=½EIθ²/L̄\n能量一致梯度力', kind: 'proc' },
+      { id: 'morison', x: 56, y: 0, w: 24, h: 8, label: 'Morison 水动力\n拖曳+惯性(含海流/波浪)', kind: 'proc' },
+      { id: 'bed', x: 56, y: 10, w: 24, h: 8, label: '海床接触\n罚刚度 + Coulomb 摩擦', kind: 'proc' },
+      { id: 'sum', x: 86, y: 5, w: 22, h: 8, label: '节点合力 F[i]\n端部反力 reactionA/B', kind: 'data' },
+    ],
+    edges: [
+      { from: 'ends', to: 'axial' },
+      { from: 'ends', to: 'bend' },
+      { from: 'axial', to: 'morison' },
+      { from: 'bend', to: 'morison' },
+      { from: 'morison', to: 'sum' },
+      { from: 'bed', to: 'sum' },
+      { from: 'axial', to: 'bed', label: '落地段', dashed: true },
+    ],
+  },
+  {
+    id: 'newton',
+    title: 'Newton 静力求解 computeStatics',
+    nodes: [
+      { id: 'init', x: 0, y: 0, w: 22, h: 8, label: '解析初始化\ninitShape: mooring 悬链线', kind: 'proc' },
+      { id: 'res', x: 28, y: 0, w: 22, h: 8, label: '残差 R(x)\n线节点力 + 船体广义力', kind: 'proc' },
+      { id: 'jac', x: 28, y: 10, w: 22, h: 8, label: '数值 Jacobian J=∂R/∂x\n+ 对角岭 1e-7(1+|Jii|)', kind: 'proc' },
+      { id: 'step', x: 56, y: 5, w: 24, h: 8, label: '解 J·Δx=−R\n信赖域限步 0.25 m + 线搜索', kind: 'proc' },
+      { id: 'conv', x: 86, y: 0, w: 22, h: 8, label: 'res < tol?\n(归一化残差)', kind: 'decision' },
+      { id: 'done', x: 86, y: 12, w: 22, h: 8, label: '收敛: 输出静力构型\n+ 端部反力', kind: 'data' },
+    ],
+    edges: [
+      { from: 'init', to: 'res' },
+      { from: 'res', to: 'jac' },
+      { from: 'jac', to: 'step' },
+      { from: 'step', to: 'conv' },
+      { from: 'conv', to: 'res', label: '否: x+=Δx', dashed: true },
+      { from: 'conv', to: 'done', label: '是' },
+    ],
+  },
+  {
+    id: 'dynamics',
+    title: '时域动力学一步 (semi-implicit Euler)',
+    nodes: [
+      { id: 'att', x: 0, y: 0, w: 22, h: 8, label: 'updateAttachments(t)\n端点位置/绞车 L0', kind: 'proc' },
+      { id: 'forces', x: 28, y: 0, w: 22, h: 8, label: 'line.computeForces(t)\n+ coupleLinesToBodies', kind: 'proc' },
+      { id: 'lstep', x: 56, y: 0, w: 22, h: 8, label: 'line.step(dt,t)\nv+=F/m·dt, x+=v·dt', kind: 'proc' },
+      { id: 'bstep', x: 56, y: 10, w: 22, h: 8, label: 'body.step(dt,t)\n6DOF 半隐式欧拉+阻尼', kind: 'proc' },
+      { id: 'rec', x: 84, y: 5, w: 24, h: 8, label: 'record 通道曲线\nsnapshot 场景快照', kind: 'data' },
+    ],
+    edges: [
+      { from: 'att', to: 'forces' },
+      { from: 'forces', to: 'lstep' },
+      { from: 'forces', to: 'bstep', dashed: true },
+      { from: 'lstep', to: 'rec' },
+      { from: 'bstep', to: 'rec' },
+      { from: 'rec', to: 'att', label: 't+=dt 下一步', dashed: true },
+    ],
+  },
+  {
+    id: 'dave-scene',
+    title: 'DAVE 式场景图（Scene DAG）与对象体系',
+    nodes: [
+      { id: 'model', x: 38, y: 0, w: 24, h: 8, label: 'Model\n全局设置 + env', kind: 'proc' },
+      { id: 'scene', x: 0, y: 12, w: 24, h: 8, label: 'Scene (有向无环图)\nNode: Point/Poi/Shape/Frame', kind: 'data' },
+      { id: 'bodies', x: 38, y: 12, w: 24, h: 8, label: 'RigidBody6DOF\n浮体/船舶/重物', kind: 'proc' },
+      { id: 'lines', x: 76, y: 12, w: 24, h: 8, label: 'Line (lumped-mass)\n端点附着于 body/point/motion', kind: 'proc' },
+      { id: 'winch', x: 38, y: 24, w: 24, h: 8, label: 'Winch: 按速率控制 L0\n(收缆/放缆)', kind: 'proc' },
+      { id: 'attach', x: 76, y: 24, w: 24, h: 8, label: 'updateAttachments\n局部坐标→世界坐标', kind: 'proc' },
+    ],
+    edges: [
+      { from: 'model', to: 'scene' },
+      { from: 'model', to: 'bodies' },
+      { from: 'model', to: 'lines' },
+      { from: 'scene', to: 'lines', label: '附着点', dashed: true },
+      { from: 'bodies', to: 'lines', label: 'vessel 端', dashed: true },
+      { from: 'lines', to: 'winch' },
+      { from: 'winch', to: 'attach' },
+      { from: 'bodies', to: 'attach', label: 'FK/运动', dashed: true },
+    ],
+  },
+  {
+    id: 'waves',
+    title: '波浪谱 → 离散波浪分量 → 水质点运动',
+    nodes: [
+      { id: 'spec', x: 0, y: 0, w: 22, h: 8, label: 'JONSWAP/PM 谱 S(f)\n尺度校核 m0=Hs²/16', kind: 'data' },
+      { id: 'disc', x: 28, y: 0, w: 24, h: 8, label: '离散化 discretizeSpectrum\nN 个规则波分量(随机相位)', kind: 'proc' },
+      { id: 'airy', x: 56, y: 0, w: 24, h: 8, label: 'Airy/Stkes2 水质点\n速度u/加速度a/压力p', kind: 'proc' },
+      { id: 'use', x: 84, y: 0, w: 22, h: 8, label: 'Morison 载荷 / FK 船体力\n/ 浮体波面力', kind: 'data' },
+    ],
+    edges: [
+      { from: 'spec', to: 'disc' },
+      { from: 'disc', to: 'airy' },
+      { from: 'airy', to: 'use' },
+    ],
+  },
+  {
+    id: 'fatigue',
+    title: '疲劳：雨流计数 + Miner 累积损伤',
+    nodes: [
+      { id: 'hist', x: 0, y: 0, w: 22, h: 8, label: '张力时程 T(t)\n(时域分析通道)', kind: 'data' },
+      { id: 'rf', x: 28, y: 0, w: 24, h: 8, label: 'ASTM 雨流计数\n→ 循环 (幅值, 均值)', kind: 'proc' },
+      { id: 'sn', x: 56, y: 0, w: 22, h: 8, label: 'S-N 曲线\nN = A·S^-m', kind: 'data' },
+      { id: 'miner', x: 56, y: 10, w: 22, h: 8, label: 'Miner: D = Σ nᵢ/Nᵢ', kind: 'proc' },
+      { id: 'ext', x: 84, y: 5, w: 22, h: 8, label: '极值: Gumbel 拟合\n重现期值', kind: 'data' },
+    ],
+    edges: [
+      { from: 'hist', to: 'rf' },
+      { from: 'rf', to: 'miner' },
+      { from: 'sn', to: 'miner' },
+      { from: 'hist', to: 'ext', dashed: true },
+    ],
+  },
+];
+
+// ---- SVG renderer (used by the in-app Docs/Flowcharts panel) ----
+export function flowchartSVG(fc, width = 760) {
+  const W = 112, H = 34; // grid unit -> px
+  let maxX = 0, maxY = 0;
+  for (const n of fc.nodes) { maxX = Math.max(maxX, n.x + n.w); maxY = Math.max(maxY, n.y + n.h); }
+  const h = (maxY + 2) * H * 0.62 + 20;
+  const sx = width / (maxX + 2);
+  const sy = h / (maxY + 2);
+  const s = Math.min(sx, sy);
+  const X = (n) => (n.x + 1) * s, Y = (n) => (n.y + 1) * s, WW = (n) => n.w * s, HH = (n) => n.h * s;
+  const cx = (n) => X(n) + WW(n) / 2, cy = (n) => Y(n) + HH(n) / 2;
+  const byId = Object.fromEntries(fc.nodes.map(n => [n.id, n]));
+  const colors = { proc: '#dbeafe', data: '#dcfce7', decision: '#fef3c7' };
+  const strokes = { proc: '#2563eb', data: '#16a34a', decision: '#d97706' };
+  let out = `<svg viewBox="0 0 ${width} ${h}" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="11">`;
+  // edges
+  for (const e of fc.edges) {
+    const a = byId[e.from], b = byId[e.to];
+    let x1 = cx(a), y1 = cy(a), x2 = cx(b), y2 = cy(b);
+    // attach on the facing sides
+    const dx = x2 - x1, dy = y2 - y1;
+    if (Math.abs(dx) > Math.abs(dy)) { if (dx > 0) { x1 = X(a) + WW(a); x2 = X(b); } else { x1 = X(a); x2 = X(b) + WW(b); } }
+    else { if (dy > 0) { y1 = Y(a) + HH(a); y2 = Y(b); } else { y1 = Y(a); y2 = Y(b) + HH(b); } }
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const dash = e.dashed ? ' stroke-dasharray="5 4"' : '';
+    out += `<path d="M ${x1} ${y1} L ${mx} ${my} L ${x2} ${y2}" fill="none" stroke="#64748b" stroke-width="1.6"${dash} marker-end="url(#ah)"/>`;
+    if (e.label) out += `<text x="${mx + 4}" y="${my - 4}" fill="#475569" font-size="10">${e.label}</text>`;
+  }
+  out += `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#64748b"/></marker></defs>`;
+  for (const n of fc.nodes) {
+    const lines = n.label.split('\n');
+    out += `<rect x="${X(n)}" y="${Y(n)}" width="${WW(n)}" height="${HH(n)}" rx="6" fill="${colors[n.kind] || '#e2e8f0'}" stroke="${strokes[n.kind] || '#475569'}" stroke-width="1.6"/>`;
+    lines.forEach((ln, i) => {
+      out += `<text x="${cx(n)}" y="${cy(n) + (i - (lines.length - 1) / 2) * 13 + 4}" text-anchor="middle" fill="#0f172a">${ln}</text>`;
+    });
+  }
+  out += '</svg>';
+  return out;
+}

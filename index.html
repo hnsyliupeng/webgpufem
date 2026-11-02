@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebGPUFEM — OrcaFlex/DAVE 风格海洋分析 (本地独立运行)</title>
+<link rel="stylesheet" href="./app/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/" } }
+</script>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌊 WebGPUFEM</h1>
+    <span class="sub">OrcaFlex / DAVE 风格海洋柔性结构分析 · 纯浏览器清洁室实现 · 完全本地离线运行</span>
+  </div>
+  <div class="badge">清洁室实现：未对 DAVEcore 等二进制反编译</div>
+</header>
+<main>
+  <aside id="left">
+    <h2>算例</h2>
+    <div id="exlist"></div>
+    <div class="runbox">
+      <button id="btnStatics">求静力</button>
+      <button id="btnDyn">时域动力</button>
+      <button id="btnStop" disabled>停止</button>
+      <div id="prog"></div>
+    </div>
+    <div id="exdesc"></div>
+  </aside>
+  <section id="center">
+    <canvas id="view"></canvas>
+    <div id="timeline">
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1">
+      <span id="tlabel">t = 0.00 s</span>
+      <button id="btnPlay">▶ 播放</button>
+    </div>
+    <canvas id="chart"></canvas>
+  </section>
+  <aside id="right">
+    <nav id="tabs">
+      <button data-tab="verify" class="on">✔ 验证</button>
+      <button data-tab="docs">📖 文档</button>
+      <button data-tab="flow">🔀 流程图</button>
+      <button data-tab="dl">⬇ 下载</button>
+    </nav>
+    <div id="tab-verify" class="tab on"></div>
+    <div id="tab-docs" class="tab"></div>
+    <div id="tab-flow" class="tab"></div>
+    <div id="tab-dl" class="tab"></div>
+  </aside>
+</main>
+<footer>
+  <span>10 个验证算例全部 PASS（见右侧“验证”）· 截图见 screenshots/ · Word 文档见 docs/ · 运行: <code>npm run verify</code> / <code>npm run serve</code></span>
+</footer>
+<script type="module" src="./app/app.js"></script>
+</body>
+</html>
