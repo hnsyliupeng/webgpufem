@@ -1,5 +1,16 @@
 // core/render_scene.js — turn a Model + snapshot into a plain renderable scene description.
 // Used by the browser (three.js) and by the Node software rasterizer (screenshots).
+import { rotVecToMat3, mat3Vec } from './math.js';
+
+// world-space triangles of a body-local mesh under (pos, rot)
+function meshTrisWorld(mesh, pos, rot) {
+  const R = rotVecToMat3(rot || [0, 0, 0]);
+  return mesh.tri.map(t => t.map(i => {
+    const w = mat3Vec(R, mesh.pos[i]);
+    return [w[0] + pos[0], w[1] + pos[1], w[2] + pos[2]];
+  }));
+}
+
 export function describeScene(model, snap, opts = {}) {
   const scene = {
     camera: opts.camera || { pos: [120, -160, 90], target: [0, 0, -30] },
@@ -20,11 +31,12 @@ export function describeScene(model, snap, opts = {}) {
         name: bs.name, type: bs.type, pos: bs.pos, rot: bs.rot, q: bs.q,
         L: b?.L, B: b?.B, T: b?.hydro?.T ?? b?.T_eq, mass: b?.mass, Awp: b?.hydro?.Awp,
         hydro: b?.hydro?.kind,
+        meshTris: b?.mesh ? meshTrisWorld(b.mesh, bs.pos, bs.rot) : null,
       });
     }
   } else {
     for (const l of model.lines) scene.lines.push({ name: l.name, pts: l.pos.map(p => [...p]), T: Array.from(l.segT), d: l.d });
-    for (const b of model.bodies) scene.bodies.push({ name: b.name, type: b.type, pos: b.worldOrigin(), rot: b.rotVec(), L: b.L, B: b.B, T: b.hydro?.T ?? b.T_eq, Awp: b.hydro?.Awp, hydro: b.hydro?.kind });
+    for (const b of model.bodies) scene.bodies.push({ name: b.name, type: b.type, pos: b.worldOrigin(), rot: b.rotVec(), L: b.L, B: b.B, T: b.hydro?.T ?? b.T_eq, Awp: b.hydro?.Awp, hydro: b.hydro?.kind, meshTris: b.mesh ? meshTrisWorld(b.mesh, b.worldOrigin(), b.rotVec()) : null });
   }
   // scene-graph POIs for display
   for (const n of model.scene.nodes.values()) {

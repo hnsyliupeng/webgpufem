@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T00:30:31.383Z
+生成时间: 2026-11-03T02:24:59.160Z
 
 总体: **全部 PASS**
 
@@ -28,11 +28,12 @@
 | ex20 | DAVE-notebooks GHS Nato pontoon：部分充注液舱的吃水与横倾 | 5.9e-11 | - | ✅ PASS |
 | ex21 | DAVE-notebooks OrcaFlex 交叉验证 3plift：三点吊 10 t 体的平衡位姿 | 2.8e+1 | - | ✅ PASS |
 | ex22 | DAVE-notebooks OrcaFlex 交叉验证 Snake15：15 节铰接链悬链 vs OrcaFlex 存档 | 5.2e+3 | - | ✅ PASS |
-| ex23 | DAVE-notebooks 100x30x8 barge：goal_seek 质量使吃水=4 m + LC6d 定位弹簧 + 压载 | 1.1e-14 | - | ✅ PASS |
+| ex23 | DAVE-notebooks 100x30x8 barge：goal_seek 质量使吃水=4 m + LC6d 定位弹簧 + 压载 | 1.0e-7 | - | ✅ PASS |
 | ex24 | DAVE-notebooks "Joints and DOF"：缆索悬挂刚体的转动平衡 | 1.2e+4 | - | ✅ PASS |
 | ex25 | DAVE-notebooks hook block：力作用下吊钩绕 z 自由转动对准 | 8.0e-14 | - | ✅ PASS |
 | ex26 | DAVE-notebooks 力穿过旋转坐标系链：Scene DAG 世界变换校验 | 0.0e+0 | - | ✅ PASS |
 | ex27 | DAVE-notebooks Vessel Stability 02 Lift：驳船吊重横倾 | 1.2e+0 | - | ✅ PASS |
+| ex28 | 网格几何建模：OBJ解析+图元+精确体积/形心/惯性；网格浮力任意姿态水线切割 | 2.5e-13 | - | ✅ PASS |
 
 ## 详细校核项
 
@@ -409,4 +410,26 @@ DAVE 节点单元级校验：Spring 平衡位移 x=L0−F/k；Beam 轴向 ΔL=(W
 | 倾向吊臂侧 (roll 与 −y 同号力矩) | 1.0000 | 1.0000 | - | Infinity | PASS |
 
 截图: ![ex27](screenshots/ex27.png)
+
+### ex28 网格几何建模：OBJ解析+图元+精确体积/形心/惯性；网格浮力任意姿态水线切割
+
+core/mesh.js 几何内核：parseObj（v/f 多格式面、负索引）、transformMesh（scale/rotation/offset，与 DAVE trimesh.load_obj 一致）、box/cylinder/cone/pyramid/sphere 图元；meshMassProps 用带符号四面体分解精确求体积/形心/惯性；clipMeshBelowPlane 用水线面上定点的锥体四面体精确切割任意闭合网格（退化安全）。校验：官方 cube.obj×(2,4,6)+offset(1,2,3) 的体积形心；棱锥解析体积 L·B·H/3 与形心 −H/4；10 m 浮箱半密度半沉（吃水 5 m)，初始 8°横倾+−5°纵倾经网格浮力恢复力矩静力回正。
+
+| 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
+|---|---|---|---|---|---|
+| cube.obj(官方DAVE资产)×scale(2,4,6) 体积 = 48 m³ | 48.0000 | 48.0000 | m^3 | 1.000e-9 | PASS |
+| cube.obj+offset(1,2,3) 形心误差 | 0.0000 | 0.0000 | m | 0.0000 | PASS |
+| 棱锥 体积 = L·B·H/3 = 266.6667 | 266.6667 | 266.6667 | m^3 | 1.000e-9 | PASS |
+| 棱锥 形心 z = −H/4 = −2 | -2.0000 | -2.0000 | m | 1.000e-9 | PASS |
+| 水线切割 半箱 V = 500 | 500.0000 | 500.0000 | m^3 | 1.000e-9 | PASS |
+| 切割 浮心 z = −2.5 | -2.5000 | -2.5000 | m | 1.000e-9 | PASS |
+| 切割 水线面积 Awp = 100 | 100.0000 | 100.0000 | m^2 | 1.000e-9 | PASS |
+| 静力残差 | 0.0000 | 2.480e-13 | - | 1.0000 | PASS |
+| 浮箱半沉：箱底(keel) z = −5 m，吃水 5 m | -5.0000 | -5.0000 | m | 0.0010 | PASS |
+| 8°横倾经网格浮力回正 |roll| | 0.0000 | 1.955e-13 | rad | 0.0100 | PASS |
+| −5°纵倾回正 |pitch| | 0.0000 | 3.548e-13 | rad | 0.0100 | PASS |
+| 平衡排开体积 = 500 m³ | 500.0000 | 500.0000 | m^3 | 1.000e-6 | PASS |
+| 浮力 = 重量 = 5.0259e6 N | 5.026e+6 | 5.026e+6 | N | 1.000e-6 | PASS |
+
+截图: ![ex28](screenshots/ex28.png)
 

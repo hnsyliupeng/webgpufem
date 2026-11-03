@@ -57,7 +57,10 @@ export function renderPNG(scene, opts = {}) {
   let ext = { min: [1e9, 1e9, 1e9], max: [-1e9, -1e9, -1e9] };
   const acc = (p) => { for (let k = 0; k < 3; k++) { ext.min[k] = Math.min(ext.min[k], p[k]); ext.max[k] = Math.max(ext.max[k], p[k]); } };
   for (const l of scene.lines) for (const p of l.pts) acc(p);
-  for (const b of scene.bodies) acc(b.pos);
+  for (const b of scene.bodies) {
+    acc(b.pos);
+    if (b.meshTris) for (const t of b.meshTris) for (const p of t) acc(p);
+  }
   if (ext.min[0] > 1e8) { ext = { min: [-50, -50, -110], max: [150, 50, 10] }; }
   const pad = 30;
   ext.min = ext.min.map(v => v - pad); ext.max = ext.max.map(v => v + pad);
@@ -114,6 +117,16 @@ export function renderPNG(scene, opts = {}) {
 
   // bodies
   for (const b of scene.bodies) {
+    if (b.meshTris) {
+      const base = b.type === 'Vessel' ? [110, 160, 240] : [224, 175, 104];
+      for (const t of b.meshTris) {
+        const n = v3.norm(v3.cross(v3.sub(t[1], t[0]), v3.sub(t[2], t[0])));
+        const light = 0.55 + 0.45 * Math.abs(n[2]);
+        const col = base.map(c => Math.min(255, Math.round(c * light)));
+        tri(t[0], t[1], t[2], col, 0.96);
+      }
+      continue;
+    }
     const isBox = b.hydro === 'box' && b.L && b.B;
     if (isBox) {
       const L = b.L, B = b.B, T = b.T || 5;

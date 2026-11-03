@@ -2,7 +2,7 @@
 
 > **边界声明**：本仓库为**清洁室（clean-room）实现**——仅依据 OrcaFlex / DAVE 的公开文档、经典海洋工程理论（悬链线、Morison、水静力、波浪谱、Newton 静力、时域积分、雨流疲劳）以及公开的 DAVE 仓库架构思路编写，**未对 DAVEcore 或任何商业二进制做反编译、反汇编或逆向工程**。
 
-一个完全**本地离线运行**的 HTML App + 数值库：场景图（DAVE 式 Scene DAG）、缆索 lumped-mass 有限元（OrcaFlex 式 Line）、船舶/浮体 6DOF、波浪谱（Airy/JONSWAP）、海流/风/海床、Newton 静力、时域动力学、雨流+Miner 疲劳与 Gumbel 极值，并带 **27 个程序化验证算例（全部 PASS）** 与渲染截图，其中 ex11–ex16 为 **DAVE 官方算例移植**（stability / unstable hinge / pin-hole / shackles 吊索 / wind&current / 元件库单元校验），ex17–ex27 为 **DAVE-notebooks 官方仓库（github.com/RubendeBruin/DAVE-notebooks）全部模型算例的复现**（catenary / catenary hinges+Connector2d / hydrostatic barge / GHS Nato pontoon 液舱 / ×OrcaFlex 3plift / ×OrcaFlex Snake15 / 100x30x8 barge goal_seek / Joints&DOF / hook / 旋转坐标系链 / Vessel Stability Lift)。
+一个完全**本地离线运行**的 HTML App + 数值库：场景图（DAVE 式 Scene DAG）、缆索 lumped-mass 有限元（OrcaFlex 式 Line）、船舶/浮体 6DOF、波浪谱（Airy/JONSWAP）、海流/风/海床、Newton 静力、时域动力学、雨流+Miner 疲劳与 Gumbel 极值，并带 **28 个程序化验证算例（全部 PASS）** 与渲染截图，其中 ex11–ex16 为 **DAVE 官方算例移植**（stability / unstable hinge / pin-hole / shackles 吊索 / wind&current / 元件库单元校验），ex17–ex27 为 **DAVE-notebooks 官方仓库（github.com/RubendeBruin/DAVE-notebooks）全部模型算例的复现**（catenary / catenary hinges+Connector2d / hydrostatic barge / GHS Nato pontoon 液舱 / ×OrcaFlex 3plift / ×OrcaFlex Snake15 / 100x30x8 barge goal_seek / Joints&DOF / hook / 旋转坐标系链 / Vessel Stability Lift)。
 
 ## 快速开始
 
@@ -10,7 +10,7 @@
 git clone <本仓库> && cd webgpufem
 npm install            # 仅 three + pngjs（已 vendored 在 vendor/，可省略）
 npm run serve          # 静态服务器(恒带 no-store 防缓存) → 浏览器打开 http://localhost:8000
-npm run verify         # 运行全部 27 个算例：程序化 PASS/FAIL + 1280×800 截图 + 报告
+npm run verify         # 运行全部 28 个算例：程序化 PASS/FAIL + 1280×800 截图 + 报告
 node tools/smoke.mjs   # 快速冒烟测试（秒级）
 npm run docs           # 生成 Word 实现文档 docs/OrcaFlex_DAVE_实现文档.docx（另有 PDF 副本 docs/OrcaFlex_DAVE_实现文档.pdf）
 ```
@@ -21,10 +21,11 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 - **场景树（Scene DAG）+ 属性检查器**（节点/船体/线/绞车/**DAVE 元件节点**实时属性）
 - **DAVE 元件节点库**（`core/elements.js`): Spring / Force / Beam(EA,EIy) / LinCon6(LC6d) / Hinge(GeometricContact 销孔） / ContactBall / Tank / BallastSystem / BuoyancyBox(非线性浮力网格） / 吊索 rigging / Measurement —— 元件力与缆反力同通道注入 `body.external`，静力与动力自动耦合，3D 中以连线渲染
 - **环境滑杆**（波高/周期/波向、海流、风速，实时生效）+ **绞车 L0 滑杆**
-- 导入：App 工具栏 **⬆ 导入** 接受 **DAVE `.dave` 建模脚本**（经 `core/dave_import.js` clean-room 解释执行，直接进入 Scene DAG 场景树）、含 `s.new_*` 的 `.py`，或本系统导出的 `.json`（`Model.fromJSON`)
+- 导入：App 工具栏 **⬆ 导入** 接受 **DAVE `.dave` 建模脚本**（经 `core/dave_import.js` clean-room 解释执行，直接进入 Scene DAG 场景树）、含 `s.new_*` 的 `.py`、`.obj` 网格，或本系统导出的 `.json`（`Model.fromJSON`)
+- 几何建模：`core/mesh.js` 提供 OBJ 解析、程序化图元（工具栏 **➕ 几何**：箱体/圆柱/球/圆锥/棱锥，半密度漂浮）、精确网格体积/形心/惯性与**任意姿态水线面切割浮力** `BuoyancyMesh`（`.dave` 的 `trimesh.load_obj` 浮力与 `new_visual` 网格均走精确网格，不再用包围盒近似）；3D 视图与软件渲染都绘制真实网格
 - 导出：当前模型 JSON（DAVE 式） / OrcaFlex 风格 YAML / DAVE py 脚本 / 当前 3D 画面 PNG
 - “🧪 重跑校核”在浏览器内用与 runner 相同的参数完整重跑该算例全部校核项
-- 右侧页卡：✔🖼 验证截图（内嵌 27 张渲染截图 + PASS 表）、📖 文档、🔀 流程图（SVG，含 DAVE 元件节点图）、⬇ 下载全部文件
+- 右侧页卡：✔🖼 验证截图（内嵌 28 张渲染截图 + PASS 表）、📖 文档、🔀 流程图（SVG，含 DAVE 元件节点图）、⬇ 下载全部文件
 - `?ex=ex07` URL 参数直达算例；启动时有内核自检徽章与脚本错误上屏提示
 
 ## 目录结构
@@ -32,15 +33,15 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 | 路径 | 内容 |
 |---|---|
 | `index.html`, `app/` | 独立运行的 Web App（3D 视图 / 算例 / 验证 / 文档 / 流程图 / 下载） |
-| `core/` | 数值库：`math` `waves` `env` `catenary` `line` `vessel` `scene` `solvers` `elements`(DAVE 节点） `post` `render_scene` `flowcharts` `dave_import`(.dave 导入器） |
-| `examples/` | 27 个验证算例（ex01–ex10 原创 + ex11–ex16 DAVE 官方算例移植 + ex17–ex27 DAVE-notebooks 复现；**ex22/ex23 直接由 `examples/assets/*.dave` 导入构建**） |
+| `core/` | 数值库：`math` `waves` `env` `catenary` `line` `vessel` `scene` `solvers` `elements`(DAVE 节点） `post` `render_scene` `flowcharts` `dave_import`(.dave 导入器） `mesh`(网格几何/网格浮力） |
+| `examples/` | 28 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 官方算例移植 + ex17–ex27 DAVE-notebooks 复现；**ex22/ex23 直接由 `examples/assets/*.dave` 导入构建**） |
 | `examples/assets/` | 官方 DAVE 模型文件（Snake15.dave / 100x30x8_barge.dave / cube.obj，MPL-2.0，见其中 README 与 LICENSE) + 浏览器可 import 的文本包装 |
 | `tools/` | `run_examples.mjs`（验证+截图+报告） `raster.mjs`（软件渲染 PNG） `smoke.mjs` `export_docs.mjs` `build_docs.py`（docx） `build_pdf.py`（PDF 副本） `wheels/` |
 | `docs/` | `doc_data.js/json`（内置文档） `verification_report.{md,html}` `OrcaFlex_DAVE_实现文档.docx` + `.pdf` 副本 `figs/`（流程图 PNG） `flowcharts.json` |
-| `screenshots/` | 每个算例的渲染截图（ex01–ex27.png） |
+| `screenshots/` | 每个算例的渲染截图（ex01–ex28.png） |
 | `vendor/` | three.module.js + OrbitControls + Line2 系列（本地，App 离线可用） |
 
-## 27 个验证算例（`npm run verify`，全部 PASS）
+## 28 个验证算例（`npm run verify`，全部 PASS）
 
 | 算例 | 验证目标 | 代表方法 |
 |---|---|---|
@@ -71,6 +72,7 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 | ex25 | DAVE-notebooks hook：yaw 自由吊钩在 300,300,0 kN 下对准到 yaw=−45°，z 力矩=0 | Force + yaw 自由度 |
 | ex26 | DAVE-notebooks 旋转坐标系链：Scene DAG worldPosition == 手工 Rodrigues 合成（误差 0) | Scene DAG 变换 |
 | ex27 | DAVE-notebooks Vessel Stability 02 Lift：吊重缆张力=9.807e6 N=重量，横倾 vs 力矩平衡求根 | 吊重横倾 + 独立力矩参考 |
+| ex28 | 网格几何：OBJ解析+图元+精确体积/形心/惯性；BuoyancyMesh 网格浮力水线切割，浮箱半沉吃水5m+倾角回正 | `core/mesh.js` + `BuoyancyMesh` |
 
 每个算例：`node tools/run_examples.mjs <exId>` 单独运行（子集运行会与已有结果合并，不会覆盖），输出 PASS/FAIL 表、`screenshots/exXX.png`、并汇总进 `app/verification_data.js` 与 `docs/verification_report.{md,html}`。
 
@@ -82,12 +84,12 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 
 - **11 个模型/物理类笔记本** → ex17–ex27，每个都是程序化 PASS/FAIL + 一张截图，与仓库内 OrcaFlex 交叉验证存档（`validation/orcaflex/*.yml`) 或解析解对比（见上表）。
 - **移植手法**：父子刚体链（Snake15、catenary hinges、hook）用“世界摆放刚体 + Hinge(GeometricContact)”等价替代，不实现父子刚体运动学；Connector2d 用罚函数刚性连接（`Connector2d` 节点）；OBJ 网格浮力（Nato pontoon、DELFTship、pyramid 冰山）用包围盒 `BuoyancyBox` 近似并在算例描述注明；`goal_seek` 用 `solvers.goalSeek` 二分；DAVE 单位 t/kN 换算为 kg/N。
-- **求解器增强**：为支撑 taut 轻缆/铰接链新增自适应 LM 静力模式（`computeStatics(model,{mode:'lm'})`，残差按张力尺度缩放），默认 legacy 路径不变——全套 27/27 PASS 无回归。
+- **求解器增强**：为支撑 taut 轻缆/铰接链新增自适应 LM 静力模式（`computeStatics(model,{mode:'lm'})`，残差按张力尺度缩放），默认 legacy 路径不变——全套 28/28 PASS 无回归。
 - **纯 GUI/查看器/工作流笔记本**（00 First tests、demo-import、99 Technical tests、Pandas、start GUI、03 Workflow Parts 1–3、04 Reporting) 无独立物理校核目标，映射到 App 既有能力：3D 视图+软件渲染回退、导入/导出（JSON/YAML/DAVE-py)、?ex= 参数化、验证页卡与报告下载（详见 docs 6A.3)。
 
 **可视化验证证据**：
-- `screenshots/ex01–ex27.png` —— 每个算例的软件渲染场景截图（张力着色）
-- `screenshots/verification_overview.png` —— 27 张截图 + PASS 徽章的总览拼图（`node tools/make_overview.mjs` 生成）
+- `screenshots/ex01–ex28.png` —— 每个算例的软件渲染场景截图（张力着色；网格体渲染为三角网格）
+- `screenshots/verification_overview.png` —— 28 张截图 + PASS 徽章的总览拼图（`node tools/make_overview.mjs` 生成）
 - App 内“✔🖼 验证截图”页卡直接嵌入全部截图与 PASS/FAIL 表；`docs/verification_report.html` 同样内嵌截图
 - 若浏览器无 WebGL，App 自动回退为显示对应算例的验证截图，并会在页面头部显示“内核自检 PASS”徽章
 

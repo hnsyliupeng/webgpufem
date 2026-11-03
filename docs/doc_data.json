@@ -57,6 +57,7 @@
         "vessel.js — 刚体6DOF、箱型水静力、FK 波浪力、GZ",
         "scene.js — SNode 场景 DAG、Model、saveJSON、导出 OrcaFlex YAML / DAVE py",
         "dave_import.js — .dave 建模脚本 clean-room 导入器（Python 子集解释 + recorder 建模，进 Scene DAG)",
+        "mesh.js — 三角网格几何：OBJ 解析、图元(box/cylinder/cone/pyramid/sphere)、精确体积/形心/惯性、水线面切割",
         "solvers.js — 附着更新、Newton 静力、时域积分、模态分析",
         "post.js — 统计、ASTM 雨流、Miner、Gumbel 极值",
         "render_scene.js — 场景描述(供 three.js 与软件渲染共用)"
@@ -264,7 +265,28 @@
         "Model.saveJSON() — DAVE 风格的 JSON 场景序列化（App ⬆ 导入可读回，Model.fromJSON)",
         "exportOrcaFlexYAML() — 导出 OrcaFlex 风格 YAML 草案",
         "exportDavePy() — 导出 DAVE 风格 Python 建模脚本",
-        "loadDaveModel()（core/dave_import.js) — 导入 DAVE .dave 建模脚本为 Model + Scene DAG（App ⬆ 导入按钮、ex22/ex23 构建均走此路径）"
+        "loadDaveModel()（core/dave_import.js) — 导入 DAVE .dave 建模脚本为 Model + Scene DAG（App ⬆ 导入按钮、ex22/ex23 构建均走此路径）",
+        "parseObj()/transformMesh()（core/mesh.js) — 导入 .obj 网格（App ⬆ 导入 .obj 生成带网格浮力的浮体）；BuoyancyMesh — 任意网格的精确水线切割浮力（替代包围盒近似）"
+       ]
+      }
+     ]
+    },
+    {
+     "h": "6.3 几何与网格建模（core/mesh.js)",
+     "level": 2,
+     "body": [
+      {
+       "t": "p",
+       "s": "几何内核 core/mesh.js：parseObj 解析 OBJ（v/f 多格式面、负索引、自动三角化）；transformMesh 做 DAVE trimesh.load_obj 式变换（scale/rotation(deg)/offset)；boxMesh/cylinderMesh/coneMesh/pyramidMesh/sphereMesh 为程序化图元；meshMassProps 用带符号四面体分解精确求闭合网格的体积、形心与惯性（方向自动校正）；clipMeshBelowPlane 以水线面上定点的锥体四面体精确切割任意网格（任意姿态、退化安全），给出排开体积、浮心、水线面积。"
+      },
+      {
+       "t": "ul",
+       "items": [
+        "BuoyancyMesh（elements.js)：new_buoyancy + trimesh.load_obj 现在走精确网格切割（不再是包围盒近似）——浮力 ρgV 作用在浮心，天然给出 6DOF 恢复力矩；包围盒 BuoyancyBox 仅在资产文本缺失时兜底。",
+        "渲染：body.mesh 的网格三角形同时进入 three.js 视图（BufferGeometry 实时刷新）与软件渲染器（画家算法着色三角形），截图与浏览器一致。",
+        "App 内建模：工具栏 ➕ 几何 下拉（箱体/圆柱/球/圆锥/棱锥）在当前场景新建半密度漂浮网格体；⬆ 导入 接受 .obj 直接生成带网格浮力的浮体。",
+        "ex28 验证：官方 cube.obj×scale 的体积/形心、棱锥解析体积 L·B·H/3 与形心 −H/4、水线切割半箱 V=500/cob −2.5/Awp=100、10 m 浮箱半沉吃水 5 m 且 8° 横倾 + −5° 纵倾静力回正（13/13 PASS)。",
+        "dave_import.js 中 new_visual 挂接真实 OBJ 网格到刚体（如 barge.obj 144 面)，Scene 树与 3D 视图同步显示。"
        ]
       }
      ]
@@ -340,7 +362,7 @@
       },
       {
        "t": "p",
-       "s": "其余算例的移植策略（避免实现父子刚体动力学）：Snake15 以外的铰接链 = 世界摆放的刚体 + Hinge(GeometricContact)；Connector2d = 罚函数刚性连接；OBJ 网格浮力（Nato pontoon/DELFTship/pyramid 冰山）用其包围盒的 BuoyancyBox 近似并在算例描述中注明；goal_seek = solvers.goalSeek 二分；DAVE 单位换算 t→×1000 kg、kN→×1000 N。求解器方面为支撑这些算例新增了自适应 LM 模式（computeStatics 的 mode=\"lm\" 分支，含张力尺度的残差缩放），默认 legacy 路径保持 ex01–ex16 行为不变（27/27 全部 PASS 回归）。"
+       "s": "其余算例的移植策略（避免实现父子刚体动力学）：Snake15 以外的铰接链 = 世界摆放的刚体 + Hinge(GeometricContact)；Connector2d = 罚函数刚性连接；OBJ 网格浮力（Nato pontoon/DELFTship/pyramid 冰山）用其包围盒的 BuoyancyBox 近似并在算例描述中注明；goal_seek = solvers.goalSeek 二分；DAVE 单位换算 t→×1000 kg、kN→×1000 N。求解器方面为支撑这些算例新增了自适应 LM 模式（computeStatics 的 mode=\"lm\" 分支，含张力尺度的残差缩放），默认 legacy 路径保持 ex01–ex16 行为不变（28/28 全部 PASS 回归）。"
       },
       {
        "t": "p",
@@ -397,7 +419,7 @@
   },
   {
    "id": "examples",
-   "title": "8. 验证算例（27 个，全部 PASS)",
+   "title": "8. 验证算例（28 个，全部 PASS)",
    "children": [
     {
      "h": "8.1 算例清单",
@@ -432,7 +454,8 @@
         "ex24 DAVE-notebooks Joints&DOF：缆挂刚体转动平衡（缆力线过重心，跨度=L(1+T/EA))",
         "ex25 DAVE-notebooks hook：yaw 自由吊钩在力作用下对准（yaw=−45°，z 力矩=0)",
         "ex26 DAVE-notebooks 旋转坐标系链：Scene DAG 世界变换 == 手工 Rodrigues 合成",
-        "ex27 DAVE-notebooks Vessel Stability 02 Lift：吊重缆张力=重量，驳船横倾 vs 力矩平衡求根"
+        "ex27 DAVE-notebooks Vessel Stability 02 Lift：吊重缆张力=重量，驳船横倾 vs 力矩平衡求根",
+        "ex28 网格几何（core/mesh.js)：OBJ解析+图元+精确体积/形心/惯性，BuoyancyMesh 网格浮力任意姿态水线切割（半沉浮箱吃水/倾角回正，13 项校验）"
        ]
       },
       {
@@ -453,7 +476,7 @@
      "body": [
       {
        "t": "code",
-       "s": "git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 27 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html"
+       "s": "git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 28 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html"
       },
       {
        "t": "p",
@@ -489,7 +512,7 @@
        "t": "ul",
        "items": [
         "core/ — 数值库与场景图",
-        "examples/ — 27 个验证算例（ex01–ex10 原创 + ex11–ex16 DAVE 移植 + ex17–ex27 DAVE-notebooks 复现，ex22/ex23 由 examples/assets/*.dave 导入构建）",
+        "examples/ — 28 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27 DAVE-notebooks 复现，ex22/ex23 由 examples/assets/*.dave 导入构建）",
         "tools/ — 验证/截图/文档构建脚本",
         "app/ — Web App (index.html + app/)",
         "docs/ — 文档数据、验证报告、docx",

@@ -21,7 +21,7 @@ export const DOC_SECTIONS = [
         { t: 'code', s: "import { getExample } from './examples/index.js';\nimport * as sv from './core/solvers.js';\nconst m = getExample('ex07').build();\nsv.computeStatics(m, { tol: 1e-7 });\nconst run = sv.runDynamics(m, { tEnd: 90 });" },
       ] },
       { h: '1.3 模块地图 (core/)', level: 2, body: [
-        { t: 'ul', items: ['math.js — 向量/矩阵/旋转、线性求解、Jacobi 特征值、RNG', 'waves.js — Airy/JONSWAP 谱、谱离散、波面与水质点运动', 'env.js — 海床罚函数+Coulomb、海流(幂律)、风', 'catenary.js — 解析弹性悬链线 + 海床 touchdown 求解', 'line.js — lumped-mass 线单元(轴向/弯曲/Morison/海床/端反力)', 'vessel.js — 刚体6DOF、箱型水静力、FK 波浪力、GZ', 'scene.js — SNode 场景 DAG、Model、saveJSON、导出 OrcaFlex YAML / DAVE py', 'dave_import.js — .dave 建模脚本 clean-room 导入器（Python 子集解释 + recorder 建模，进 Scene DAG)', 'solvers.js — 附着更新、Newton 静力、时域积分、模态分析', 'post.js — 统计、ASTM 雨流、Miner、Gumbel 极值', 'render_scene.js — 场景描述(供 three.js 与软件渲染共用)'] },
+        { t: 'ul', items: ['math.js — 向量/矩阵/旋转、线性求解、Jacobi 特征值、RNG', 'waves.js — Airy/JONSWAP 谱、谱离散、波面与水质点运动', 'env.js — 海床罚函数+Coulomb、海流(幂律)、风', 'catenary.js — 解析弹性悬链线 + 海床 touchdown 求解', 'line.js — lumped-mass 线单元(轴向/弯曲/Morison/海床/端反力)', 'vessel.js — 刚体6DOF、箱型水静力、FK 波浪力、GZ', 'scene.js — SNode 场景 DAG、Model、saveJSON、导出 OrcaFlex YAML / DAVE py', 'dave_import.js — .dave 建模脚本 clean-room 导入器（Python 子集解释 + recorder 建模，进 Scene DAG)', 'mesh.js — 三角网格几何：OBJ 解析、图元(box/cylinder/cone/pyramid/sphere)、精确体积/形心/惯性、水线面切割', 'solvers.js — 附着更新、Newton 静力、时域积分、模态分析', 'post.js — 统计、ASTM 雨流、Miner、Gumbel 极值', 'render_scene.js — 场景描述(供 three.js 与软件渲染共用)'] },
       ] },
     ],
   },
@@ -91,8 +91,18 @@ export const DOC_SECTIONS = [
         { t: 'p', s: '线与船的端点“附着”到场景节点或船体局部坐标上：updateAttachments 每步把 attachment 的局部坐标经其父链变换到世界坐标，作为线的端点位置；绞车(Winch)以速率修改线的 L0 实现收放缆。' },
       ] },
       { h: '6.2 序列化与互操作', level: 2, body: [
-        { t: 'ul', items: ['Model.saveJSON() — DAVE 风格的 JSON 场景序列化（App ⬆ 导入可读回，Model.fromJSON)', 'exportOrcaFlexYAML() — 导出 OrcaFlex 风格 YAML 草案', 'exportDavePy() — 导出 DAVE 风格 Python 建模脚本', 'loadDaveModel()（core/dave_import.js) — 导入 DAVE .dave 建模脚本为 Model + Scene DAG（App ⬆ 导入按钮、ex22/ex23 构建均走此路径）'] },
+        { t: 'ul', items: ['Model.saveJSON() — DAVE 风格的 JSON 场景序列化（App ⬆ 导入可读回，Model.fromJSON)', 'exportOrcaFlexYAML() — 导出 OrcaFlex 风格 YAML 草案', 'exportDavePy() — 导出 DAVE 风格 Python 建模脚本', 'loadDaveModel()（core/dave_import.js) — 导入 DAVE .dave 建模脚本为 Model + Scene DAG（App ⬆ 导入按钮、ex22/ex23 构建均走此路径）', 'parseObj()/transformMesh()（core/mesh.js) — 导入 .obj 网格（App ⬆ 导入 .obj 生成带网格浮力的浮体）；BuoyancyMesh — 任意网格的精确水线切割浮力（替代包围盒近似）'] },
       ] },
+      { h: '6.3 几何与网格建模（core/mesh.js)', level: 2, body: [
+        { t: 'p', s: '几何内核 core/mesh.js：parseObj 解析 OBJ（v/f 多格式面、负索引、自动三角化）；transformMesh 做 DAVE trimesh.load_obj 式变换（scale/rotation(deg)/offset)；boxMesh/cylinderMesh/coneMesh/pyramidMesh/sphereMesh 为程序化图元；meshMassProps 用带符号四面体分解精确求闭合网格的体积、形心与惯性（方向自动校正）；clipMeshBelowPlane 以水线面上定点的锥体四面体精确切割任意网格（任意姿态、退化安全），给出排开体积、浮心、水线面积。' },
+        { t: 'ul', items: [
+          'BuoyancyMesh（elements.js)：new_buoyancy + trimesh.load_obj 现在走精确网格切割（不再是包围盒近似）——浮力 ρgV 作用在浮心，天然给出 6DOF 恢复力矩；包围盒 BuoyancyBox 仅在资产文本缺失时兜底。',
+          '渲染：body.mesh 的网格三角形同时进入 three.js 视图（BufferGeometry 实时刷新）与软件渲染器（画家算法着色三角形），截图与浏览器一致。',
+          'App 内建模：工具栏 ➕ 几何 下拉（箱体/圆柱/球/圆锥/棱锥）在当前场景新建半密度漂浮网格体；⬆ 导入 接受 .obj 直接生成带网格浮力的浮体。',
+          'ex28 验证：官方 cube.obj×scale 的体积/形心、棱锥解析体积 L·B·H/3 与形心 −H/4、水线切割半箱 V=500/cob −2.5/Awp=100、10 m 浮箱半沉吃水 5 m 且 8° 横倾 + −5° 纵倾静力回正（13/13 PASS)。',
+          'dave_import.js 中 new_visual 挂接真实 OBJ 网格到刚体（如 barge.obj 144 面)，Scene 树与 3D 视图同步显示。',
+        ] },
+      ]},
     ],
   },
   {
@@ -128,7 +138,7 @@ export const DOC_SECTIONS = [
           'ex27 10 Buoyancy and Stability "Vessel Stability 02 Lift.ipynb"：驳船 100×30×12、20000 t，吊 1000 t 重物缆张力 = 9.807e6 N = 重量，横倾角与"固定横倾+只解升沉"的独立力矩平衡求根一致、倾向吊臂侧',
         ] },
         { t: 'p', s: '.dave 导入器（core/dave_import.js，纯文本解释执行，不链接/反编译任何 DAVE 二进制）支持 .dave 的 Python 子集：赋值、for i in range(n) 缩进块、多行调用、元组、f-string、.format()、True/False/None、solved() 标记、s.get_resource_path()；节点映射：new_frame/new_rigidbody→RigidBody6DOF（父链且平动锁定 = 世界摆放 + Hinge 关节；t→kg×1000、角度 deg→rad)，new_point→Scene 点/附着，new_cable→Line(EA kN→N)，new_geometric_contact→Hinge(k=1e9)，new_connector2d→Connector2d(kN/m→N/m)，new_linear_connector_6d→LinCon6，new_buoyancy+trimesh.load_obj→OBJ 包围盒×scale 的 BuoyancyBox（注明近似），new_ballastsystem+new_tank→Tank（capacity kN→V m³)，new_visual/new_waveinteraction→记录到 meta.visuals 不仿真。' },
-        { t: 'p', s: '其余算例的移植策略（避免实现父子刚体动力学）：Snake15 以外的铰接链 = 世界摆放的刚体 + Hinge(GeometricContact)；Connector2d = 罚函数刚性连接；OBJ 网格浮力（Nato pontoon/DELFTship/pyramid 冰山）用其包围盒的 BuoyancyBox 近似并在算例描述中注明；goal_seek = solvers.goalSeek 二分；DAVE 单位换算 t→×1000 kg、kN→×1000 N。求解器方面为支撑这些算例新增了自适应 LM 模式（computeStatics 的 mode="lm" 分支，含张力尺度的残差缩放），默认 legacy 路径保持 ex01–ex16 行为不变（27/27 全部 PASS 回归）。' },
+        { t: 'p', s: '其余算例的移植策略（避免实现父子刚体动力学）：Snake15 以外的铰接链 = 世界摆放的刚体 + Hinge(GeometricContact)；Connector2d = 罚函数刚性连接；OBJ 网格浮力（Nato pontoon/DELFTship/pyramid 冰山）用其包围盒的 BuoyancyBox 近似并在算例描述中注明；goal_seek = solvers.goalSeek 二分；DAVE 单位换算 t→×1000 kg、kN→×1000 N。求解器方面为支撑这些算例新增了自适应 LM 模式（computeStatics 的 mode="lm" 分支，含张力尺度的残差缩放），默认 legacy 路径保持 ex01–ex16 行为不变（28/28 全部 PASS 回归）。' },
         { t: 'p', s: '纯 GUI/查看器/工作流类笔记本（无独立物理校核目标）→ 映射到 App 既有功能：00 First tests / demo-import asset / 99 Technical tests(test-viewer, Non-blocking GUI, Latex pdf) → App 内 3D 视图+软件渲染回退+导入导出面板；Pandas → 验证数据导出 CSV/JSON + app/verification_data.js；start GUI from notebook → npm run serve 本地 App；03 Workflow Parts 1–3(circle eye/shackle 几何、geometriccontact、多进程 variations) → 导入/导出 JSON·YAML·DAVE-py 与 ?ex= 参数化算例；04 Reporting → 验证页卡表格 + docs/verification_report.{md,html,docx} 下载。' },
       ] },
       { h: '6A.4 .dave 模型文件导入（Scene DAG 集成）', level: 2, body: [
@@ -153,7 +163,7 @@ export const DOC_SECTIONS = [
     ],
   },
   {
-    id: 'examples', title: '8. 验证算例（27 个，全部 PASS)', children: [
+    id: 'examples', title: '8. 验证算例（28 个，全部 PASS)', children: [
       { h: '8.1 算例清单', level: 2, body: [
         { t: 'ul', items: [
           'ex01 空中弹性悬链线 vs 解析解（端部张力/垂深）',
@@ -183,6 +193,7 @@ export const DOC_SECTIONS = [
           'ex25 DAVE-notebooks hook：yaw 自由吊钩在力作用下对准（yaw=−45°，z 力矩=0)',
           'ex26 DAVE-notebooks 旋转坐标系链：Scene DAG 世界变换 == 手工 Rodrigues 合成',
           'ex27 DAVE-notebooks Vessel Stability 02 Lift：吊重缆张力=重量，驳船横倾 vs 力矩平衡求根',
+          'ex28 网格几何（core/mesh.js)：OBJ解析+图元+精确体积/形心/惯性，BuoyancyMesh 网格浮力任意姿态水线切割（半沉浮箱吃水/倾角回正，13 项校验）',
         ] },
         { t: 'p', s: '每个算例由 tools/run_examples.mjs 自动运行并做程序化 PASS/FAIL 校核，同时渲染 1280×800 截图存入 screenshots/，结果写入 app/verification_data.js 与 docs/verification_report.{md,html}，可在 App 的“验证”页卡查看。' },
       ] },
@@ -191,7 +202,7 @@ export const DOC_SECTIONS = [
   {
     id: 'usage', title: '9. 使用指南', children: [
       { h: '9.1 本地运行', level: 2, body: [
-        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 27 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
+        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 28 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
         { t: 'p', s: 'App 完全离线运行：3D 视图、算例仿真、验证表、文档、流程图、下载面板均为本地模块，无任何外部请求。' },
         { t: 'ul', items: ['3D 视图可点击拾取对象（船体/缆节点/POI)，左侧场景树同步高亮；无 WebGL 时自动回退显示软件渲染截图', '左侧面板：场景树(Scene DAG)、属性检查器(实时 q/张力/残差)、环境滑杆(波高/周期/波向/海流/风速)、绞车 L0 滑杆', '导入/导出：⬆ 导入 .dave/.py/JSON 模型文件（.dave 经 core/dave_import.js 进 Scene DAG)，⬇ 导出模型 JSON(DAVE 式)/OrcaFlex YAML/DAVE py/当前画面 PNG；URL 参数 ?ex=ex07 直达算例', '“🧪 重跑校核”按钮在浏览器内以与 runner 相同的参数重跑该算例全部校核项并显示 PASS/FAIL', '底部时序图图例可点击显示/隐藏对应通道；播放支持 0.25–4× 速度与时间 scrubber'] },
       ] },
@@ -199,7 +210,7 @@ export const DOC_SECTIONS = [
         { t: 'code', s: 'pip install python-docx pillow reportlab fonttools brotli\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG)\nnpm run docs:pdf       # tools/build_pdf.py  → docs/OrcaFlex_DAVE_实现文档.pdf（同源数据的 PDF 副本，内嵌 NotoSansSC 中文字体）' },
       ] },
       { h: '9.3 目录结构', level: 2, body: [
-        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 27 个验证算例（ex01–ex10 原创 + ex11–ex16 DAVE 移植 + ex17–ex27 DAVE-notebooks 复现，ex22/ex23 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
+        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 28 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27 DAVE-notebooks 复现，ex22/ex23 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
       ] },
     ],
   },

@@ -7,13 +7,15 @@ import { Seabed, CurrentField, WindField } from '../core/env.js';
 import { WaveField, G } from '../core/waves.js';
 import { solveCatenary, catenaryPoint, mooringTouchdown } from '../core/catenary.js';
 import { stats, rainflow, minerDamage } from '../core/post.js';
-import { Spring, Force, Beam, LinCon6, Hinge, ContactBall, Tank, BallastSystem, BuoyancyBox, Connector2d, createSling, addMeasurement } from '../core/elements.js';
+import { Spring, Force, Beam, LinCon6, Hinge, ContactBall, Tank, BallastSystem, BuoyancyBox, BuoyancyMesh, Connector2d, createSling, addMeasurement } from '../core/elements.js';
 import { refreshExternal, goalSeek, computeStatics, updateAttachments } from '../core/solvers.js';
 import { loadDaveModel } from '../core/dave_import.js';
 import SNAKE15_DAVE from './assets/Snake15.dave.js';
 import BARGE_DAVE from './assets/100x30x8_barge.dave.js';
 import CUBE_OBJ from './assets/cube.obj.js';
-const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ };
+import BARGE_OBJ from './assets/barge.obj.js';
+import { parseObj, transformMesh, meshMassProps, clipMeshBelowPlane, boxMesh, cylinderMesh, pyramidMesh } from '../core/mesh.js';
+const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ, 'barge.obj': BARGE_OBJ };
 
 
 // solve the catenary parameter a from a*sinh(halfSpan/a) = halfLen (bisection)
@@ -1223,6 +1225,61 @@ export const EXAMPLES = [
         { name: '缆张力 = 重物重量 9.81 MN', expected: W, actual: T, unit: 'N', tol: 0.03 * W },
         { name: '驳船横倾角 vs 固定横倾+升沉求解的力矩平衡求根', expected: phiAna, actual: Math.abs(rollS), unit: 'rad', tol: 0.35, absFloor: 0.01 },
         { name: '倾向吊臂侧 (roll 与 −y 同号力矩)', expected: -Math.sign(susp[1]), actual: Math.sign(rollS), unit: '-', tol: Infinity, pass: Math.sign(rollS) === -Math.sign(susp[1]) || Math.abs(rollS) < 1e-6 },
+      ];
+    },
+  },
+
+  {
+    id: 'ex28', cat: '几何/网格', name: '网格几何建模：OBJ解析+图元+精确体积/形心/惯性；网格浮力任意姿态水线切割',
+    desc: 'core/mesh.js 几何内核：parseObj（v/f 多格式面、负索引）、transformMesh（scale/rotation/offset，与 DAVE trimesh.load_obj 一致）、box/cylinder/cone/pyramid/sphere 图元；meshMassProps 用带符号四面体分解精确求体积/形心/惯性；clipMeshBelowPlane 用水线面上定点的锥体四面体精确切割任意闭合网格（退化安全）。校验：官方 cube.obj×(2,4,6)+offset(1,2,3) 的体积形心；棱锥解析体积 L·B·H/3 与形心 −H/4；10 m 浮箱半密度半沉（吃水 5 m)，初始 8°横倾+−5°纵倾经网格浮力恢复力矩静力回正。',
+    analysis: { kind: 'statics' },
+    camera: { pos: [26, -32, 18], target: [0, 0, -3] },
+    build() {
+      const m = new Model('ex28_mesh_geometry');
+      // floating mesh box (half density -> half submerged), low CG for stability
+      const box = boxMesh(10, 10, 10);
+      const mp = meshMassProps(box, 1025);
+      const body = new RigidBody6DOF({
+        name: 'floating_box', type: 'Buoy', mass: 0.5 * mp.mass, cog: [0, 0, -2],
+        inertia: mp.I.map(v => v * 0.5), pos: [0, 0, 0], rot: [0.14, -0.09, 0],
+        hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, false, false, false, false],
+      });
+      body.mesh = box;
+      m.addBody(body);
+      m.addElement(new BuoyancyMesh({ name: 'mesh_buoyancy', body, mesh: box, rho: 1025 }));
+      // decorative mesh primitives (fixed frames, rendered as meshes)
+      const pyr = new RigidBody6DOF({ name: 'pyramid', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [-15, 0, -3], rot: [0, 0, 0.3], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
+      pyr.mesh = pyramidMesh(8, 8, 6); m.addBody(pyr);
+      const cyl = new RigidBody6DOF({ name: 'cylinder', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [15, 0, -3], rot: [0.2, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
+      cyl.mesh = cylinderMesh(2, 6, 24); m.addBody(cyl);
+      return m;
+    },
+    verify(model, ctx) {
+      const st = computeStatics(model, { tol: 1e-7, maxIter: 400 });
+      // pure mesh-math checks
+      const cube = transformMesh(parseObj(CUBE_OBJ), { scale: [2, 4, 6], offset: [1, 2, 3] });
+      const mpc = meshMassProps(cube, 1025);
+      const cerr = Math.max(Math.abs(mpc.c[0] - 1), Math.abs(mpc.c[1] - 2), Math.abs(mpc.c[2] - 3));
+      const mpp = meshMassProps(pyramidMesh(10, 10, 8), 1);
+      const clip = clipMeshBelowPlane(boxMesh(10, 10, 10), [0, 0, 1], 0);
+      const body = model.bodies.find(b => b.name === 'floating_box');
+      const buoy = model.elements.find(e => e.type === 'Buoyancy');
+      buoy.apply();
+      const RHO = 1025, GG = 9.80665;
+      return [
+        { name: 'cube.obj(官方DAVE资产)×scale(2,4,6) 体积 = 48 m³', expected: 48, actual: mpc.V, unit: 'm^3', tol: 1e-9, absFloor: 1e-6 },
+        { name: 'cube.obj+offset(1,2,3) 形心误差', expected: 0, actual: cerr, unit: 'm', tol: 0, absFloor: 1e-9 },
+        { name: '棱锥 体积 = L·B·H/3 = 266.6667', expected: 800 / 3, actual: mpp.V, unit: 'm^3', tol: 1e-9, absFloor: 1e-6 },
+        { name: '棱锥 形心 z = −H/4 = −2', expected: -2, actual: mpp.c[2], unit: 'm', tol: 1e-9, absFloor: 1e-9 },
+        { name: '水线切割 半箱 V = 500', expected: 500, actual: clip.V, unit: 'm^3', tol: 1e-9, absFloor: 1e-6 },
+        { name: '切割 浮心 z = −2.5', expected: -2.5, actual: clip.c[2], unit: 'm', tol: 1e-9, absFloor: 1e-9 },
+        { name: '切割 水线面积 Awp = 100', expected: 100, actual: clip.A, unit: 'm^2', tol: 1e-9, absFloor: 1e-6 },
+        { name: '静力残差', expected: 0, actual: st.residual, unit: '-', tol: 1, absFloor: 1e-3 },
+        { name: '浮箱半沉：箱底(keel) z = −5 m，吃水 5 m', expected: -5, actual: body.worldOrigin()[2] - 5, unit: 'm', tol: 1e-3 },
+        { name: '8°横倾经网格浮力回正 |roll|', expected: 0, actual: Math.abs(body.rotVec()[0]), unit: 'rad', tol: 0.01 },
+        { name: '−5°纵倾回正 |pitch|', expected: 0, actual: Math.abs(body.rotVec()[1]), unit: 'rad', tol: 0.01 },
+        { name: '平衡排开体积 = 500 m³', expected: 500, actual: buoy.lastV, unit: 'm^3', tol: 1e-6 },
+        { name: '浮力 = 重量 = 5.0259e6 N', expected: 0.5 * RHO * 1000 * GG, actual: RHO * GG * buoy.lastV, unit: 'N', tol: 1e-6 },
       ];
     },
   },

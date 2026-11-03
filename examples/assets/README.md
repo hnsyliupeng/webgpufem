@@ -1,6 +1,6 @@
 # Vendored DAVE model assets
 
-`Snake15.dave`, `100x30x8_barge.dave`, `cube.obj` are copied verbatim from the public
+`Snake15.dave`, `100x30x8_barge.dave`, `cube.obj`, `barge.obj` are copied verbatim from the public
 DAVE repository (github.com/RubendeBruin/DAVE, `src/DAVE/resources/`), which is
 licensed under the Mozilla Public License 2.0 — see `DAVE-LICENSE-MPL2.txt`.
 They are used here as *import fixtures* for the clean-room `.dave` importer

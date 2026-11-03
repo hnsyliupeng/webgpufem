@@ -21,7 +21,8 @@
 import { Model } from './scene.js';
 import { RigidBody6DOF } from './vessel.js';
 import { Line } from './line.js';
-import { Hinge, Connector2d, LinCon6, Tank, BallastSystem, BuoyancyBox, Spring } from './elements.js';
+import { Hinge, Connector2d, LinCon6, Tank, BallastSystem, BuoyancyBox, BuoyancyMesh, Spring } from './elements.js';
+import { parseObj, transformMesh, meshBBox, meshMassProps } from './mesh.js';
 import { rotVecToMat3, mat3Vec } from './math.js';
 import { G } from './waves.js';
 
@@ -207,6 +208,8 @@ function kwOf(args) {
   return { __pos: args };
 }
 
+function meshMassPropsSafe(mesh) { try { return meshMassProps(mesh, 1).V; } catch { return null; } }
+
 // ---------- OBJ bounds ----------
 export function objBounds(text) {
   const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
@@ -378,6 +381,14 @@ export function loadDaveModel(daveText, opts = {}) {
             const scale = lkw.scale || [1, 1, 1];
             const off = lkw.offset || [0, 0, 0];
             const objText = resolveAsset(String(path).replace(/\\/g, '/').split('/').pop());
+            if (objText) {
+              // exact trimesh buoyancy: clip the transformed OBJ by the waterplane (core/mesh.js)
+              const mesh = transformMesh(parseObj(objText), { scale, rotation: lkw.rotation || [0, 0, 0], offset: off });
+              const e = new BuoyancyMesh({ name: kw.name || 'Buoyancy', body: parent, mesh, rho });
+              model.addElement(e);
+              model.meta.buoyancyMesh = { path: String(path), verts: mesh.pos.length, tris: mesh.tri.length, V: meshMassPropsSafe(mesh) };
+              return e;
+            }
             const bb = objText ? objBounds(objText) : null;
             let L, B, T, center;
             if (bb) {
@@ -388,7 +399,7 @@ export function loadDaveModel(daveText, opts = {}) {
             }
             const e = new BuoyancyBox({ name: kw.name || 'Buoyancy', body: parent, L, B, T, offset: center, rho });
             model.addElement(e);
-            model.meta.buoyancyApprox = `OBJ ${path} bounding box x scale (full trimesh waterplane clipping not implemented)`;
+            model.meta.buoyancyApprox = `OBJ ${path} bounding box x scale (asset text unavailable)`;
             return e;
           },
         },
@@ -422,7 +433,18 @@ export function loadDaveModel(daveText, opts = {}) {
       model.addElement(t);
       return t;
     },
-    new_visual(...args) { const kw = kwOf(args); model.meta.visuals.push({ name: kw.name, path: kw.path }); return {}; },
+    new_visual(...args) {
+      const kw = kwOf(args);
+      const parent = bodyByRef(kw.parent);
+      const objText = kw.path ? resolveAsset(String(kw.path).replace(/\\/g, '/').split('/').pop()) : null;
+      let meshAttached = false;
+      if (parent && objText) {
+        parent.mesh = transformMesh(parseObj(objText), { scale: kw.scale || [1, 1, 1], rotation: kw.rotation || [0, 0, 0], offset: kw.offset || [0, 0, 0] });
+        meshAttached = true;
+      }
+      model.meta.visuals.push({ name: kw.name, path: kw.path, mesh: meshAttached });
+      return {};
+    },
     new_waveinteraction(...args) {
       const kw = kwOf(args);
       model.meta.visuals.push({ name: kw.name, path: kw.path, note: 'dhyd coefficients not simulated (linear box hydrostatics used)' });

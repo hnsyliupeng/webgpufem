@@ -4,6 +4,7 @@
 //   inject forces into RigidBody6DOF.external (same channel as line end reactions), so Newton statics
 //   and dynamics pick them up automatically via solvers.applyElements().
 import { v3, rotVecToMat3 } from './math.js';
+import { clipMeshBelowPlane, meshBBox } from './mesh.js';
 import { G } from './waves.js';
 import { Line } from './line.js';
 
@@ -303,6 +304,35 @@ export class BuoyancyBox {
     }
   }
 }
+export class BuoyancyMesh {
+  // DAVE "Buoyancy" node for an arbitrary trimesh: exact clipping of the closed mesh by the
+  // world waterplane (any attitude) -> displaced volume V, center of buoyancy (body-local),
+  // waterplane area. Buoyancy force rho*g*V applied at the cob gives full 6DOF restoring.
+  constructor(cfg) {
+    this.type = 'Buoyancy'; this.name = cfg.name || 'BuoyancyMesh';
+    this.body = cfg.body; this.mesh = cfg.mesh; this.rho = cfg.rho ?? 1025;
+    this.meshIsMesh = true;
+    const bb = meshBBox(cfg.mesh);
+    this.L = bb.size[0]; this.B = bb.size[1]; this.T = bb.size[2]; // bbox (compat/reporting)
+    this.offset = bb.center;
+    this.lastV = 0; this.lastA = 0; this.lastCob = null;
+  }
+  apply() {
+    const b = this.body;
+    const R = rotVecToMat3(b.rotVec());
+    const o = b.worldOrigin();
+    // world waterplane z=0 expressed in body frame: w = o + R p, w_z = o_z + (R p)_z,
+    // submerged <=> (third row of R)·p <= -o_z
+    const n = [R[6], R[7], R[8]];
+    const r = clipMeshBelowPlane(this.mesh, n, -o[2]);
+    this.lastV = r.V; this.lastA = r.A; this.lastCob = r.c;
+    if (r.V > 1e-9) {
+      const Fz = this.rho * G * r.V;
+      b.external.push({ F: [0, 0, Fz], point: [...r.c] });
+    }
+  }
+}
+
 function worldToLocal(b, w) {
   // inverse of worldPoint: local = R^T (w - origin)
   const o = b.worldOrigin();

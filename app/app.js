@@ -10,7 +10,9 @@ import { LineGeometry } from 'three/addons/LineGeometry.js';
 import { LineMaterial } from 'three/addons/LineMaterial.js';
 import { EXAMPLES, getExample } from '../examples/index.js';
 import * as sv from '../core/solvers.js';
-import { attachWorld } from '../core/elements.js';
+import { attachWorld, BuoyancyMesh } from '../core/elements.js';
+import { RigidBody6DOF } from '../core/vessel.js';
+import { boxMesh, cylinderMesh, sphereMesh, coneMesh, pyramidMesh, parseObj, transformMesh, meshMassProps, meshBBox } from '../core/mesh.js';
 import { describeScene, tensionColor } from '../core/render_scene.js';
 import { waveNumber } from '../core/waves.js';
 import { VERIFICATION } from './verification_data.js';
@@ -140,13 +142,20 @@ function ensureLineViz(name, n) {
 function ensureBodyViz(name, d) {
   let m = bodyViz.get(name);
   if (m) return m;
-  let geo;
-  if (d.L && d.B && d.T) geo = new THREE.BoxGeometry(d.L, d.B, d.T);
+  let geo, isMesh = !!d.meshTris;
+  if (isMesh) {
+    const flat = [];
+    for (const t of d.meshTris) for (const p of t) flat.push(p[0], p[1], p[2]);
+    geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(flat), 3));
+    geo.computeVertexNormals();
+  } else if (d.L && d.B && d.T) geo = new THREE.BoxGeometry(d.L, d.B, d.T);
   else { const r = Math.sqrt((d.Awp || 20) / Math.PI); geo = new THREE.CylinderGeometry(r, r, 2 * r, 20); }
   const color = d.type === 'Vessel' ? 0x7aa2f7 : 0xe0af68;
-  m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.9 }));
-  m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x0b1220 })));
+  m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.92 }));
+  if (!isMesh) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x0b1220 })));
   m.userData.ref = { kind: 'body', name };
+  m.userData.isMesh = isMesh;
   grpModel.add(m); bodyViz.set(name, m); return m;
 }
 
@@ -185,8 +194,19 @@ function renderSnap(model, snap) {
   }
   for (const b of desc.bodies) {
     const m = ensureBodyViz(b.name, b);
-    m.position.set(...b.pos);
-    m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(b.rot[0], b.rot[1], b.rot[2], 'ZYX')));
+    if (m.userData.isMesh && b.meshTris) {
+      // mesh triangles are already world-space: refresh positions in place
+      const arr = m.geometry.attributes.position.array;
+      let k = 0;
+      for (const t of b.meshTris) for (const p of t) { arr[k++] = p[0]; arr[k++] = p[1]; arr[k++] = p[2]; }
+      m.geometry.attributes.position.needsUpdate = true;
+      m.geometry.computeVertexNormals();
+      m.position.set(0, 0, 0);
+      m.quaternion.identity();
+    } else {
+      m.position.set(...b.pos);
+      m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(b.rot[0], b.rot[1], b.rot[2], 'ZYX')));
+    }
   }
   for (const p of desc.points) {
     let s = poiViz.get(p.name);
@@ -496,8 +516,25 @@ $('#fileImport').onchange = async (ev) => {
     } else if (/\.json$/i.test(f.name)) {
       model = Model.fromJSON(JSON.parse(text));
       model.meta.importedFile = f.name;
+    } else if (/\.obj$/i.test(f.name)) {
+      const mesh = parseObj(text);
+      const mp = meshMassProps(mesh, 1025);
+      const bb = meshBBox(mesh);
+      model = new Model('import_obj');
+      const body = new RigidBody6DOF({
+        name: f.name.replace(/\.obj$/i, ''), type: 'Buoy',
+        mass: 0.5 * mp.mass, cog: [...mp.c], inertia: mp.I.map(v => Math.max(v * 0.5, 1e-3)),
+        pos: [0, 0, 0], rot: [0, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0],
+        fixed: [true, true, false, false, false, false],
+      });
+      body.mesh = mesh;
+      model.addBody(body);
+      model.addElement(new BuoyancyMesh({ name: 'Buoyancy', body, mesh, rho: 1025 }));
+      model.scene.newAxis(body.name, { position: [0, 0, 0], rotation: [0, 0, 0] });
+      model.meta.importedFile = f.name;
+      model.meta.objStats = { verts: mesh.pos.length, tris: mesh.tri.length, V: mp.V, centroid: mp.c, bbox: bb.size };
     } else {
-      alert('不支持的文件类型：请选择 .dave（DAVE 建模脚本）、.py（含 s.new_* 调用）或本系统导出的 .json');
+      alert('不支持的文件类型：请选择 .dave（DAVE 建模脚本）、.py（含 s.new_* 调用）、.obj（网格）或本系统导出的 .json');
       return;
     }
   } catch (err) {
@@ -508,7 +545,9 @@ $('#fileImport').onchange = async (ev) => {
   const ps = model.bodies.map(b => b.pos);
   const c = [0, 0, 0];
   for (const p of ps) { c[0] += p[0] / ps.length; c[1] += p[1] / ps.length; c[2] += p[2] / ps.length; }
-  const r = Math.max(30, ...ps.map(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]))) * 2.2;
+  if (model.meta.objStats) { const st = model.meta.objStats; c[0] = st.centroid[0]; c[1] = st.centroid[1]; c[2] = st.centroid[2]; }
+  let r = Math.max(30, ...ps.map(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]))) * 2.2;
+  if (model.meta.objStats) r = Math.max(r, ...model.meta.objStats.bbox) * 1.6;
   curEx = {
     id: 'imported', name: '⬆ ' + f.name,
     desc: `导入的模型文件 <code>${f.name}</code>：${model.bodies.length} 刚体 / ${model.lines.length} 缆 / ${model.elements.length} 元件` +
@@ -524,6 +563,36 @@ $('#fileImport').onchange = async (ev) => {
   history.replaceState(null, '', location.pathname);
   startExample(curEx, 'statics');
   $('#prog').textContent += ` · 已导入 ${f.name}`;
+};
+
+// ---------------- procedural geometry modeling (mesh + mesh buoyancy) ----------------
+const GEO_DEFS = {
+  box: () => boxMesh(10, 6, 4),
+  cylinder: () => cylinderMesh(2, 6, 24),
+  sphere: () => sphereMesh(3, 20, 14),
+  cone: () => coneMesh(2, 6, 24),
+  pyramid: () => pyramidMesh(8, 8, 6),
+};
+$('#btnAddGeo').onclick = () => {
+  if (!sim || !curEx) { alert('请先选择一个算例再新建几何体'); return; }
+  const kind = $('#geoKind').value;
+  const mesh = GEO_DEFS[kind]();
+  const model = sim.model;
+  const mp = meshMassProps(mesh, 1025);
+  const n = model.bodies.filter(b => b.name.startsWith(kind + '_')).length;
+  const name = `${kind}_${n}`;
+  const body = new RigidBody6DOF({
+    name, type: 'Buoy', mass: 0.5 * mp.mass, cog: [0, 0, Math.min(mp.c[2], -1)], // low CG -> stable
+    inertia: mp.I.map(v => Math.max(v * 0.5, 1e-3)),
+    pos: [10 * (n % 4) - 15, 6, 0], rot: [0, 0, 0], hydro: null,
+    addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, false, false, false, false],
+  });
+  body.mesh = mesh;
+  model.addBody(body);
+  model.addElement(new BuoyancyMesh({ name: `buoy_${name}`, body, mesh, rho: 1025 }));
+  model.scene.newAxis(name, { position: [...body.pos], rotation: [0, 0, 0] });
+  startExample({ ...curEx, name: curEx.name + ' + ' + name, build: () => model }, 'statics');
+  $('#prog').textContent += ` · 已新建几何体 ${name}（${mesh.pos.length} 顶点/${mesh.tri.length} 三角面，V=${mp.V.toFixed(2)} m³)`;
 };
 
 $('#btnShot').onclick = () => {
@@ -628,7 +697,9 @@ const DL = [
   ['入口与 App', ['index.html', 'app/app.js', 'app/style.css', 'app/verification_data.js']],
   ['核心库 core/', ['core/math.js', 'core/waves.js', 'core/env.js', 'core/catenary.js', 'core/line.js', 'core/vessel.js', 'core/scene.js', 'core/solvers.js', 'core/post.js', 'core/render_scene.js', 'core/flowcharts.js']],
   ['算例 examples/', ['examples/index.js']],
+  ['核心 core/', ['core/mesh.js', 'core/dave_import.js', 'core/elements.js', 'core/scene.js', 'core/solvers.js', 'core/vessel.js', 'core/line.js', 'core/render_scene.js']],
   ['工具 tools/', ['tools/serve.mjs', 'tools/run_examples.mjs', 'tools/raster.mjs', 'tools/smoke.mjs', 'tools/export_docs.mjs', 'tools/build_docs.py', 'tools/build_pdf.py', 'tools/make_overview.mjs', 'tools/wheels/python_docx-1.2.0-py3-none-any.whl']],
+  ['DAVE 资产 assets/', ['examples/assets/Snake15.dave', 'examples/assets/100x30x8_barge.dave', 'examples/assets/cube.obj', 'examples/assets/barge.obj', 'examples/assets/README.md', 'examples/assets/DAVE-LICENSE-MPL2.txt']],
   ['文档 docs/', ['docs/doc_data.js', 'docs/verification_report.md', 'docs/verification_report.html', 'docs/OrcaFlex_DAVE_实现文档.docx', 'docs/OrcaFlex_DAVE_实现文档.pdf', 'docs/flowcharts.json', 'docs/doc_data.json']],
   ['截图 screenshots/', [...Array.from({ length: 10 }, (_, i) => `screenshots/ex${String(i + 1).padStart(2, '0')}.png`), 'screenshots/verification_overview.png']],
   ['其他', ['README.md', 'package.json', '.gitignore', 'vendor/three.module.js', 'vendor/three.core.js', 'vendor/OrbitControls.js', 'vendor/Line2.js', 'vendor/LineGeometry.js', 'vendor/LineMaterial.js', 'vendor/LineSegments2.js', 'vendor/LineSegmentsGeometry.js', 'vendor/BufferGeometryUtils.js']],
