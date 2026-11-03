@@ -88,7 +88,7 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 - **纯 GUI/查看器/工作流笔记本**（00 First tests、demo-import、99 Technical tests、Pandas、start GUI、03 Workflow Parts 1–3、04 Reporting) 无独立物理校核目标，映射到 App 既有能力：3D 视图+软件渲染回退、导入/导出（JSON/YAML/DAVE-py)、?ex= 参数化、验证页卡与报告下载（详见 docs 6A.3)。
 
 **可视化验证证据**：
-- `screenshots/ex01–ex28.png` —— 每个算例的软件渲染场景截图（张力着色；网格体渲染为三角网格）
+- `screenshots/ex01–ex28.png` —— 每个算例的软件渲染截图（2x 超采样抗锯齿、太阳光+高光+深度雾、水下透水、张力着色、网格描边、左上角 EXxx PASS 徽章；浏览器内为同款质感的实时 three.js 3D)
 - `screenshots/verification_overview.png` —— 28 张截图 + PASS 徽章的总览拼图（`node tools/make_overview.mjs` 生成）
 - App 内“✔🖼 验证截图”页卡直接嵌入全部截图与 PASS/FAIL 表；`docs/verification_report.html` 同样内嵌截图
 - 若浏览器无 WebGL，App 自动回退为显示对应算例的验证截图，并会在页面头部显示“内核自检 PASS”徽章

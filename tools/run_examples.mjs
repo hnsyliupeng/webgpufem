@@ -48,7 +48,8 @@ for (const ex of EXAMPLES) {
   if (run && run.snapshots.length) snap = run.snapshots[Math.floor(run.snapshots.length * 0.6)];
   const sceneDesc = describeScene(model, snap, { camera: ex.camera, waveGridN: ex.id === 'ex10' ? 28 : 18 });
   if (model.env.waves) sceneDesc.waterGetEta = (x, y, t) => model.env.waves.eta(x, y, t);
-  const img = renderPNG(sceneDesc, { width: 1280, height: 800 });
+  const allPass = checks.every(c => c.pass);
+  const img = renderPNG(sceneDesc, { width: 1280, height: 800, label: `${ex.id.toUpperCase()} ${allPass ? 'PASS' : 'FAIL'} ${checks.filter(c => c.pass).length}/${checks.length}` });
   const shotPath = `screenshots/${ex.id}.png`;
   savePNG(img, shotPath);
   console.log(`screenshot -> ${shotPath}`);

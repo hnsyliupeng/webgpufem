@@ -33,6 +33,10 @@ let webglOK = true;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 } catch (e) { webglOK = false; console.warn('WebGL unavailable — falling back to rendered screenshot view', e); }
 // fallback: draw the example's software-rendered verification screenshot on a 2D canvas
 const shotImgs = {};
@@ -54,12 +58,20 @@ function fallbackDraw() {
   ctx.fillText(`${curEx.id} 验证截图（当前环境无 WebGL，显示软件渲染结果；本地浏览器中为实时 3D；可直接点击左侧算例切换）`, 12, 22);
 }
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x060b16);
-scene.fog = new THREE.Fog(0x060b16, 400, 1600);
+scene.background = new THREE.Color(0x0a1626);
+scene.fog = new THREE.Fog(0x0a1626, 400, 2200);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 6000);
 const controls = new OrbitControls(camera, canvas);
-scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(200, -300, 400); scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+scene.add(new THREE.HemisphereLight(0x9db8e8, 0x1c2436, 0.85));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.35); sun.position.set(200, -300, 400);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -600; sun.shadow.camera.right = 600;
+sun.shadow.camera.top = 600; sun.shadow.camera.bottom = -600;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 3000;
+sun.shadow.bias = -0.0005;
+scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.AxesHelper(30));
 
 const grpWorld = new THREE.Group(); scene.add(grpWorld);
@@ -82,12 +94,17 @@ function setCamera(cam) {
 function buildWorld(model) {
   grpWorld.clear();
   const depth = model.env.seabed ? model.env.seabed.depth : 100;
-  const bedMesh = new THREE.GridHelper(800, 20, 0x2a3a55, 0x1a2740);
+  const bedMesh = new THREE.GridHelper(1600, 32, 0x2a3a55, 0x1a2740);
   bedMesh.position.y = -depth; grpWorld.add(bedMesh);
-  const N = 48, S = 500;
+  const bed = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshLambertMaterial({ color: 0x6b5c40 }));
+  bed.rotation.x = -Math.PI / 2; bed.position.y = -depth - 0.5; bed.receiveShadow = true; grpWorld.add(bed);
+  const N = 64, S = 1200;
   const g = new THREE.PlaneGeometry(S, S, N, N); g.rotateX(-Math.PI / 2);
-  waterMesh = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: 0x1d4ed8, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
-  const wg = new THREE.Mesh(g.clone(), new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.25, depthWrite: false }));
+  waterMesh = new THREE.Mesh(g, new THREE.MeshPhongMaterial({
+    color: 0x2563eb, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false,
+    specular: 0xbfe0ff, shininess: 90,
+  }));
+  const wg = new THREE.Mesh(g.clone(), new THREE.MeshBasicMaterial({ color: 0x60a5fa, wireframe: true, transparent: true, opacity: 0.18, depthWrite: false }));
   grpWorld.add(waterMesh, wg); waterMesh.userData.wire = wg;
 }
 
@@ -152,8 +169,10 @@ function ensureBodyViz(name, d) {
   } else if (d.L && d.B && d.T) geo = new THREE.BoxGeometry(d.L, d.B, d.T);
   else { const r = Math.sqrt((d.Awp || 20) / Math.PI); geo = new THREE.CylinderGeometry(r, r, 2 * r, 20); }
   const color = d.type === 'Vessel' ? 0x7aa2f7 : 0xe0af68;
-  m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.92 }));
-  if (!isMesh) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x0b1220 })));
+  m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.94, specular: 0x88aaff, shininess: 40 }));
+  m.castShadow = true; m.receiveShadow = true;
+  if (isMesh) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x0b1220, transparent: true, opacity: 0.55 })));
+  else m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x0b1220 })));
   m.userData.ref = { kind: 'body', name };
   m.userData.isMesh = isMesh;
   grpModel.add(m); bodyViz.set(name, m); return m;
