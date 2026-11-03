@@ -35,8 +35,8 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 | `core/` | 数值库：`math` `waves` `env` `catenary` `line` `vessel` `scene` `solvers` `elements`(DAVE 节点） `post` `render_scene` `flowcharts` `dave_import`(.dave 导入器） |
 | `examples/` | 27 个验证算例（ex01–ex10 原创 + ex11–ex16 DAVE 官方算例移植 + ex17–ex27 DAVE-notebooks 复现；**ex22/ex23 直接由 `examples/assets/*.dave` 导入构建**） |
 | `examples/assets/` | 官方 DAVE 模型文件（Snake15.dave / 100x30x8_barge.dave / cube.obj，MPL-2.0，见其中 README 与 LICENSE) + 浏览器可 import 的文本包装 |
-| `tools/` | `run_examples.mjs`（验证+截图+报告） `raster.mjs`（软件渲染 PNG） `smoke.mjs` `export_docs.mjs` `build_docs.py`（docx） `wheels/` |
-| `docs/` | `doc_data.js/json`（内置文档） `verification_report.{md,html}` `OrcaFlex_DAVE_实现文档.docx` `figs/`（流程图 PNG） `flowcharts.json` |
+| `tools/` | `run_examples.mjs`（验证+截图+报告） `raster.mjs`（软件渲染 PNG） `smoke.mjs` `export_docs.mjs` `build_docs.py`（docx） `build_pdf.py`（PDF 副本） `wheels/` |
+| `docs/` | `doc_data.js/json`（内置文档） `verification_report.{md,html}` `OrcaFlex_DAVE_实现文档.docx` + `.pdf` 副本 `figs/`（流程图 PNG） `flowcharts.json` |
 | `screenshots/` | 每个算例的渲染截图（ex01–ex27.png） |
 | `vendor/` | three.module.js + OrbitControls + Line2 系列（本地，App 离线可用） |
 

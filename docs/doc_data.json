@@ -472,12 +472,12 @@
      ]
     },
     {
-     "h": "9.2 生成 Word 实现文档",
+     "h": "9.2 生成 Word 实现文档（docx + PDF 副本）",
      "level": 2,
      "body": [
       {
        "t": "code",
-       "s": "pip install python-docx pillow\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG）"
+       "s": "pip install python-docx pillow reportlab fonttools brotli\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG)\nnpm run docs:pdf       # tools/build_pdf.py  → docs/OrcaFlex_DAVE_实现文档.pdf（同源数据的 PDF 副本，内嵌 NotoSansSC 中文字体）"
       }
      ]
     },

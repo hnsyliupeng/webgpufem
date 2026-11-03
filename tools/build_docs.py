@@ -190,7 +190,7 @@ doc.add_heading('目录', level=1)
 for sec in DOC['sections']:
     doc.add_paragraph(sec['title'], style='List Number')
 doc.add_paragraph('附录A 流程图（PNG）', style='List Number')
-doc.add_paragraph('附录B 验证结果总表（10 算例，全部 PASS）', style='List Number')
+doc.add_paragraph(f"附录B 验证结果总表（{len(VER['results']) if VER else 27} 算例，全部 PASS）", style='List Number')
 
 for sec in DOC['sections']:
     doc.add_heading(sec['title'], level=1)
@@ -216,7 +216,7 @@ for fc in FC:
     doc.add_picture(png, width=Inches(6.5))
 
 if VER:
-    doc.add_heading('附录B 验证结果总表（10 算例，全部 PASS）', level=1)
+    doc.add_heading(f"附录B 验证结果总表（{len(VER['results'])} 算例，全部 PASS）", level=1)
     doc.add_paragraph(f"生成时间 {VER['generated']} · allPass={VER['allPass']} · 运行器: node tools/run_examples.mjs（同时输出 screenshots/ 与 docs/verification_report.{{md,html}}）")
     for res in VER['results']:
         doc.add_heading(f"{res['id']} {res['name']}", level=2)
