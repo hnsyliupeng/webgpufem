@@ -188,7 +188,7 @@ export const DOC_SECTIONS = [
       { t: 'table', cols: ['概念', 'DAVE 定义', '本仓库实现'], rows: [
         ['长度/力/质量/角度单位', '长度 m，力 kN，质量 mT（metric ton)，角度（含 rotation vector)一律 degrees；力矩 kN·m，转动惯量 kN·m²', 'DAVE_UNITS：m/mT/kN/deg ↔ SI 双向换算（1 mT=1000 kg，1 kN=1000 N，1°=π/180)，round-trip 校验'],
         ['节点类型（node types)', 'Scene 中 25 类节点：Axis / Point(Poi) / Frame / RigidBody / Cable / Beam / LC6d / Connector2d / Force / HydSpring / Buoyancy / Visual / TriMeshSource / Tank / BallastSystem / ContactBall / ContactMesh / GeometricContact / Circle / Shackle / Sling / SPMT / WindOrCurrentArea / WaveInteraction / Measurement', 'NODE_TYPES 注册表：类名 → {impl, status}，25/25 覆盖断言'],
-        ['Frame 与正向运动学（FK)', '节点位置/姿态均相对 parent frame；世界变换 = 父世界 × 局部（T_world = T_parent · T_local)', 'frameWorld(local, parent)：世界坐标 + 旋转矩阵合成（local.rot 与 parent.rot 统一按 DAVE 习惯处理)'],
+        ['Frame 与正向运动学（FK)', '节点位置/姿态均相对 parent frame；世界变换 = 父世界 × 局部（T_world = T_parent · T_local)；多级链逐层累乘', 'frameWorld（单级）、frameChainWorld（多级链，rot 统一 degrees)、pointWorld（局部点→世界 p_w=pos+R·p)、worldToLocal（逆 FK)；ex32 与 Scene DAG worldTransform 交叉验证（pos/R 误差 < 1e-12)、逆变换往返误差 < 1e-9'],
         ['Rotation vector（旋转向量）', '姿态用旋转向量表示：方向=旋转轴，模=旋转角（degrees)；R = Rodrigues(axis, |v|)', 'core/math.js rotVecToMat3 / mat3ToRotVec；eulerToRotVec 自洽（ex32 校验）'],
         ['heading / tilt_x / tilt_y', '由单位局部 x/y 轴定义：heading=atan2(u_x.y, u_x.x)；tilt_x=asin(u_y.z)；tilt_y=asin(−u_x.z)（= asin of z of unit −x)', 'rotVecToEuler：ex32 对 heading=30°、tilt_x=12°、tilt_y=25° 逐项断言'],
         ['转动惯量与回转半径', 'Ixx = rxx² · mass（rxx 为回转半径)', 'inertiaFromRadii(mass, [rxx,ryy,rzz])'],
@@ -232,7 +232,7 @@ export const DOC_SECTIONS = [
           'ex29 DAVE-notebooks "04 Reporting/Reporting node properties"：直接导入 DAVE 官方 cheetah.dave（网格浮力 buoyancy cheetah.obj + 24 个 STL 压载罐 + 船体 visual 网格），print_node_tree 与 notebook 输出逐行一致，solve_statics 收敛（残差 8e-9)，report() 支持 */? 通配符，6.75 m 吃水排水量 53278 m³（DAVE 标注 53290.760)，15/15 PASS',
           'ex30 DAVE-notebooks "10 Buoayncy and Stability/Carene Table"：core/marine.js 复刻 DAVE marine.carene_table（delta_draft=1e-3、delta_roll=1°、delta_pitch=0.3° 有限差分），吃水 0.25–9 m 共 19 行，V/CoB/CoF 与 DAVE 一致，14/14 PASS',
           'ex31 DAVEcore 核心功能复现对照（core/davecore.js)：7 组 DAVEcore 功能全部落地——求解器/DAG 正向运动学/trimesh 水静力/Tank 破损舱（free_flooding+permeability+cog_when_full)/悬链线与接触（新增 ContactMesh 立体角判内）/HydSpring+SPMT 等节点工厂/state_update；另用 pymeshup 式水线切片 waterplaneProps 独立交叉校验 carene（Awl/CoF/BM T=I_T/V=26.709 与 DAVE 表 26.7018 一致)，15/15 PASS',
-          'ex32 DAVE 核心概念与术语（core/concepts.js)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学 frameWorld、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量，演示场景静力收敛，13/13 PASS',
+          'ex32 DAVE 核心概念与术语（core/concepts.js)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学（单级 frameWorld + 多级链 frameChainWorld + 逆 worldToLocal + pointWorld，与 Scene DAG worldTransform 交叉验证）、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量，演示场景静力收敛，21/21 PASS',
         ] },
         { t: 'p', s: '每个算例由 tools/run_examples.mjs 自动运行并做程序化 PASS/FAIL 校核，同时渲染 1280×800 截图存入 screenshots/，结果写入 app/verification_data.js 与 docs/verification_report.{md,html}，可在 App 的“验证”页卡查看。' },
       ] },

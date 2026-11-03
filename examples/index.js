@@ -1,6 +1,7 @@
 // examples/index.js — 10 verification cases (V01..V10 style) covering lines, mooring,
 // buoys, vessels, crane lift, riser, waves/spectrum/fatigue. Each has build() + verify().
-import { Model } from '../core/scene.js';
+import { Model, Scene } from '../core/scene.js';
+import { rotVecToMat3, mat3ToRotVec, mat3Mul, mat3Vec } from '../core/math.js';
 import { Line } from '../core/line.js';
 import { RigidBody6DOF, boxGZ } from '../core/vessel.js';
 import { Seabed, CurrentField, WindField } from '../core/env.js';
@@ -22,7 +23,7 @@ import { careneTable, linearizedBuoyancyProps } from '../core/marine.js';
 import { reportNode, printNodeTree, matchWildcard } from '../core/report.js';
 import { parseObj, transformMesh, meshMassProps, clipMeshBelowPlane, waterplaneProps, boxMesh, cylinderMesh, pyramidMesh } from '../core/mesh.js';
 import { DAVECORE_FEATURES, HydSpring, ContactMesh, SPMT } from '../core/davecore.js';
-import { DAVE_UNITS, NODE_TYPES, frameWorld, rotVecToEuler, eulerToRotVec, inertiaFromRadii } from '../core/concepts.js';
+import { DAVE_UNITS, NODE_TYPES, frameWorld, frameChainWorld, pointWorld, worldToLocal, rotVecToEuler, eulerToRotVec, inertiaFromRadii } from '../core/concepts.js';
 const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ, 'barge.obj': BARGE_OBJ, 'buoyancy cheetah.obj': CHEETAH_BUOY_OBJ, 'visual vessel cheetah.obj': CHEETAH_VISUAL_OBJ };
 for (const [k, v] of Object.entries(CHEETAH_TANKS)) DAVE_ASSETS[k] = 'b64:' + v; // binary STL tanks
 
@@ -1554,6 +1555,46 @@ export const EXAMPLES = [
       const e4 = rotVecToEuler([10, -8, 35]); // arbitrary rotvec -> euler (single-axis consistency)
       // inertia_radii
       const I = inertiaFromRadii(1000, [2, 3, 4]);
+      // ---- deeper FK: 3-level chain (all deg) ----
+      const chain = [
+        { pos: [10, 0, 5], rot: [0, 0, 30] },
+        { pos: [2, 0, 0], rot: [0, 20, 0] },
+        { pos: [1, 0, 0], rot: [0, 0, -15] },
+      ];
+      const leafW = frameChainWorld(chain);
+      // manual step-by-step composition with math.js primitives (rot in rad)
+      let mP = [0, 0, 0], mR = rotVecToMat3([0, 0, 0]);
+      for (const f of chain) {
+        const Rl = rotVecToMat3(f.rot.map(d => d * Math.PI / 180));
+        mP = mat3Vec(mR, f.pos).map((v, i) => v + mP[i]);
+        mR = mat3Mul(mR, Rl);
+      }
+      const chainPosErr = Math.max(...leafW.pos.map((v, i) => Math.abs(v - mP[i])));
+      const chainRErr = Math.max(...leafW.R.map((v, i) => Math.abs(v - mR[i])));
+      // cross-check against the Scene DAG worldTransform (SNode.rotation is radians)
+      const sc = new Scene('fk_check');
+      const n0 = sc.newFrame('root', { position: chain[0].pos, rotation: chain[0].rot.map(d => d * Math.PI / 180) });
+      const n1 = sc.newFrame('mid', { position: chain[1].pos, rotation: chain[1].rot.map(d => d * Math.PI / 180) });
+      const n2 = sc.newFrame('leaf', { position: chain[2].pos, rotation: chain[2].rot.map(d => d * Math.PI / 180) });
+      sc.setParent(n1, n0); sc.setParent(n2, n1);
+      const dag = sc.worldTransform(n2);
+      const dagPosErr = Math.max(...leafW.pos.map((v, i) => Math.abs(v - dag.pos[i])));
+      const dagRErr = Math.max(...leafW.R.map((v, i) => Math.abs(v - dag.R[i])));
+      // point attached to leaf frame: p_w = pos + R * p_local (Poi semantics)
+      const pw = pointWorld(leafW, [1, 2, 3]);
+      const pwManual = mat3Vec(leafW.R, [1, 2, 3]).map((v, i) => v + leafW.pos[i]);
+      const pwErr = Math.max(...pw.map((v, i) => Math.abs(v - pwManual[i])));
+      // inverse FK round-trip: worldToLocal(parentWorld, frameWorld(local, parentWorld)) == local
+      const parentW = frameChainWorld(chain.slice(0, 2));
+      const localPose = { pos: [2, 1, -1], rot: [5, -10, 30] };
+      const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R) });
+      const back = worldToLocal({ pos: parentW.pos, R: parentW.R }, { pos: wPose.pos, R: wPose.R });
+      const invPosErr = Math.max(...back.pos.map((v, i) => Math.abs(v - localPose.pos[i])));
+      const backRotErr = Math.max(...back.rot.map((v, i) => Math.abs(v - localPose.rot[i])));
+      // mixed-axis composition: parent rotvec(10,-20,30)deg * child rotvec(5,15,-25)deg
+      const mix = frameWorld({ pos: [0, 0, 0], rot: [5, 15, -25] }, { pos: [0, 0, 0], rot: [10, -20, 30].map(d => d * Math.PI / 180) });
+      const mixManual = mat3Mul(rotVecToMat3([10, -20, 30].map(d => d * Math.PI / 180)), rotVecToMat3([5, 15, -25].map(d => d * Math.PI / 180)));
+      const mixErr = Math.max(...mix.R.map((v, i) => Math.abs(v - mixManual[i])));
       return [
         { name: 'DAVE 单位制: 12300 mT = 1.23e7 kg; 10 kN = 1e4 N; 90° = π/2', expected: 1, actual: (u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12 },
         { name: '单位制往返无损 (SI->DAVE->SI)', expected: 1, actual: (u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 && Math.abs(u.angleFromSI(u.angleToSI(45)) - 45) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 },
@@ -1568,6 +1609,14 @@ export const EXAMPLES = [
         { name: '任意 rotvec(10,-8,35) 的 euler 分解自洽 |heading|≤180', expected: 1, actual: Math.abs(e4.heading) <= 180 && isFinite(e4.tilt_x) && isFinite(e4.tilt_y) ? 1 : 0, unit: '-', tol: 0, pass: Math.abs(e4.heading) <= 180 && isFinite(e4.tilt_x) },
         { name: 'inertia_radii: I = r²·m = (4000, 9000, 16000) for m=1000, r=(2,3,4)', expected: 16000, actual: I[2], unit: 'kg m^2', tol: 1e-9 },
         { name: '静力求解收敛（演示场景）', expected: 1, actual: ctx.st.converged ? 1 : 0, unit: '-', tol: 0, pass: ctx.st.converged === true },
+        { name: '深挖 FK·多级链: 3 层 frame 链 frameChainWorld == 逐步手工合成 (pos 误差)', expected: 0, actual: chainPosErr, unit: 'm', tol: 1, absFloor: 1e-12 },
+        { name: '深挖 FK·多级链: 旋转矩阵逐元素误差', expected: 0, actual: chainRErr, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: '深挖 FK·与 Scene DAG worldTransform 一致 (pos 误差)', expected: 0, actual: dagPosErr, unit: 'm', tol: 1, absFloor: 1e-12 },
+        { name: '深挖 FK·与 Scene DAG worldTransform 一致 (R 误差)', expected: 0, actual: dagRErr, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: '深挖 FK·点随 frame 变换 pointWorld: p_w = pos + R·p_local', expected: 0, actual: pwErr, unit: 'm', tol: 1, absFloor: 1e-12 },
+        { name: '深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差)', expected: 0, actual: invPosErr, unit: 'm', tol: 1, absFloor: 1e-9 },
+        { name: '深挖 FK·逆变换往返 (rot 误差, deg)', expected: 0, actual: backRotErr, unit: 'deg', tol: 1, absFloor: 1e-9 },
+        { name: '深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差)', expected: 0, actual: mixErr, unit: '-', tol: 1, absFloor: 1e-12 },
       ];
     },
   },

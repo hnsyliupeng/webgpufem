@@ -76,7 +76,7 @@ App（`index.html`）打开即用，**无任何网络请求**，功能包括：
 | ex29 | DAVE-notebooks 04 Reporting node properties：cheetah.dave 导入，print_node_tree 逐行一致 + solve_statics + report 通配符（15/15) | `core/report.js` + `core/dave_import.js` |
 | ex30 | DAVE-notebooks 10 Carene Table：cheetah 网格浮力 carene_table 吃水 0.25–9 m，V(6.75)=53290.76 m³、CoF/CoB/BM 与 DAVE 一致（14/14) | `core/marine.js` + `core/mesh.js` |
 | ex31 | DAVEcore 核心功能复现：7 组功能（求解/DAG/水静力/舱柜破损/free_flooding/permeability/悬链接触 ContactMesh/HydSpring/SPMT/state_update）+ pymeshup 式水线切片交叉校验 carene（15/15) | `core/davecore.js` + `core/mesh.js` |
-| ex32 | DAVE 核心概念与术语（deepwiki Core Concepts & Terminology)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学 frameWorld、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量（13/13) | `core/concepts.js` |
+| ex32 | DAVE 核心概念与术语（deepwiki Core Concepts & Terminology)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学 frameWorld、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量；FK 深挖：多级链/逆变换/点变换与 Scene DAG 交叉验证（21/21) | `core/concepts.js` |
 
 每个算例：`node tools/run_examples.mjs <exId>` 单独运行（子集运行会与已有结果合并，不会覆盖），输出 PASS/FAIL 表、`screenshots/exXX.png`、并汇总进 `app/verification_data.js` 与 `docs/verification_report.{md,html}`。
 

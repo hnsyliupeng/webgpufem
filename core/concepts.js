@@ -10,7 +10,7 @@
 //     derived from the unit local axes: heading = atan2(u_x.y, u_x.x), tilt_x = asin(u_y.z),
 //     tilt_y = -asin(u_x.z)
 //   * inertia_radii: Ixx = rxx^2 * mass (diagonal inertia from radii of gyration)
-import { rotVecToMat3, mat3ToRotVec, mat3Vec, mat3Mul, v3 } from './math.js';
+import { rotVecToMat3, mat3ToRotVec, mat3Vec, mat3Mul, mat3T, v3 } from './math.js';
 
 export const DAVE_UNITS = {
   length: 'm', mass: 'mT', force: 'kN', stiffnessLinear: 'kN/m', stiffnessAngular: 'kN',
@@ -65,6 +65,34 @@ export function frameWorld(local, parent) {
   const pR = rotVecToMat3(parent.rot || [0, 0, 0]);
   const pos = mat3Vec(pR, local.pos || [0, 0, 0]).map((v, i) => v + parent.pos[i]);
   return { pos, R: mat3Mul(pR, localR) };
+}
+
+// ---- multi-level frame chain FK: all rotations in DEGREES (DAVE convention) ----
+// frames: [{ pos:[x,y,z], rot:[rx,ry,rz] deg }, ...] ordered root -> ... -> leaf.
+// Equivalent to walking the Scene DAG: T_world(node) = T_world(parent) * T_local(node).
+export function frameChainWorld(frames) {
+  let acc = null; // world pose of current frame: { pos, rot(rad rotvec) }
+  for (const f of frames) {
+    const w = frameWorld({ pos: f.pos || [0, 0, 0], rot: f.rot || [0, 0, 0] }, acc);
+    acc = { pos: w.pos, rot: mat3ToRotVec(w.R) };
+  }
+  if (!acc) return { pos: [0, 0, 0], R: rotVecToMat3([0, 0, 0]) };
+  return { pos: acc.pos, R: rotVecToMat3(acc.rot) };
+}
+
+// point expressed in frame-local coordinates -> world: p_w = frame.pos + frame.R * p_local
+export function pointWorld(frame, pLocal) {
+  return mat3Vec(frame.R, pLocal).map((v, i) => v + frame.pos[i]);
+}
+
+// inverse FK: given parent's world pose and a node's world pose, recover the local pose
+// (position + rotation vector in DEGREES) relative to the parent.
+export function worldToLocal(parentWorld, worldPose) {
+  const pRt = mat3T(parentWorld.R);
+  const d = worldPose.pos.map((v, i) => v - parentWorld.pos[i]);
+  const posLocal = mat3Vec(pRt, d);
+  const Rlocal = mat3Mul(pRt, worldPose.R);
+  return { pos: posLocal, rot: mat3ToRotVec(Rlocal).map(v => v * 180 / Math.PI) };
 }
 
 // ---- rotation vector <-> tilt_x / tilt_y / heading (degrees) ----
