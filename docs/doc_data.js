@@ -181,8 +181,24 @@ export const DOC_SECTIONS = [
       { t: 'p', s: '交叉校验：waterplaneProps 对 cheetah 船体在吃水 6.75 m 的水线切片给出 Awl=8821.43 m²、CoF=(98.9449, −7.7e-7) m、BM T=I_T/V=26.709 m、BM L=I_L/V=526.1 m —— 与 DAVE Carene 表（CoF/BM T 表值 98.945/26.7018）一致；破损舱 free_flooding 液量=切割体积×permeability、平衡穿透深度 δ=W/(4k) 等均在 ex31 中断言。' },
       ]},
     ]},
+  {
+    id: 'concepts', title: '6A.6 DAVE 核心概念与术语（core/concepts.js)', children: [
+      { h: '6A.6 术语、单位与节点类型', level: 2, body: [
+      { t: 'p', s: '按 DAVE 公开文档（docs/scene_and_nodes.rst 与 node_prop_info.csv，deepwiki “Core concepts and terminology”) 整理核心概念，落地为 core/concepts.js，并由 ex32 逐项校验（13/13 PASS):' },
+      { t: 'table', cols: ['概念', 'DAVE 定义', '本仓库实现'], rows: [
+        ['长度/力/质量/角度单位', '长度 m，力 kN，质量 mT（metric ton)，角度（含 rotation vector)一律 degrees；力矩 kN·m，转动惯量 kN·m²', 'DAVE_UNITS：m/mT/kN/deg ↔ SI 双向换算（1 mT=1000 kg，1 kN=1000 N，1°=π/180)，round-trip 校验'],
+        ['节点类型（node types)', 'Scene 中 25 类节点：Axis / Point(Poi) / Frame / RigidBody / Cable / Beam / LC6d / Connector2d / Force / HydSpring / Buoyancy / Visual / TriMeshSource / Tank / BallastSystem / ContactBall / ContactMesh / GeometricContact / Circle / Shackle / Sling / SPMT / WindOrCurrentArea / WaveInteraction / Measurement', 'NODE_TYPES 注册表：类名 → {impl, status}，25/25 覆盖断言'],
+        ['Frame 与正向运动学（FK)', '节点位置/姿态均相对 parent frame；世界变换 = 父世界 × 局部（T_world = T_parent · T_local)', 'frameWorld(local, parent)：世界坐标 + 旋转矩阵合成（local.rot 与 parent.rot 统一按 DAVE 习惯处理)'],
+        ['Rotation vector（旋转向量）', '姿态用旋转向量表示：方向=旋转轴，模=旋转角（degrees)；R = Rodrigues(axis, |v|)', 'core/math.js rotVecToMat3 / mat3ToRotVec；eulerToRotVec 自洽（ex32 校验）'],
+        ['heading / tilt_x / tilt_y', '由单位局部 x/y 轴定义：heading=atan2(u_x.y, u_x.x)；tilt_x=asin(u_y.z)；tilt_y=asin(−u_x.z)（= asin of z of unit −x)', 'rotVecToEuler：ex32 对 heading=30°、tilt_x=12°、tilt_y=25° 逐项断言'],
+        ['转动惯量与回转半径', 'Ixx = rxx² · mass（rxx 为回转半径)', 'inertiaFromRadii(mass, [rxx,ryy,rzz])'],
+        ['Component（组件）', 'Frame 子场景，可作为可复用组件挂到任意节点下', 'scene.js SNode DAG parent 链（ex26 已验证世界变换 == 手工 Rodrigues 合成）'],
+      ]},
+      { t: 'p', s: 'ex32 演示场景（父子 Frame A/B + 网格浮筒）验证 frameWorld 正向运动学（点 (2,0,0) 绕父 frame z 轴 30° 后世界坐标 (11.7321, 1, 5)）、旋转合成（Rz30∘Rz30 → 60°)、heading/tilt 提取、units 换算（12300 mT=1.23e7 kg，10 kN=1e4 N，90°=π/2)、转动惯量 I=r²·m，末了对演示场景跑 computeStatics 收敛校核——13/13 PASS。' },
+      ]},
+    ]},
     {
-    id: 'examples', title: '8. 验证算例（31 个，全部 PASS)', children: [
+    id: 'examples', title: '8. 验证算例（32 个，全部 PASS)', children: [
       { h: '8.1 算例清单', level: 2, body: [
         { t: 'ul', items: [
           'ex01 空中弹性悬链线 vs 解析解（端部张力/垂深）',
@@ -216,6 +232,7 @@ export const DOC_SECTIONS = [
           'ex29 DAVE-notebooks "04 Reporting/Reporting node properties"：直接导入 DAVE 官方 cheetah.dave（网格浮力 buoyancy cheetah.obj + 24 个 STL 压载罐 + 船体 visual 网格），print_node_tree 与 notebook 输出逐行一致，solve_statics 收敛（残差 8e-9)，report() 支持 */? 通配符，6.75 m 吃水排水量 53278 m³（DAVE 标注 53290.760)，15/15 PASS',
           'ex30 DAVE-notebooks "10 Buoayncy and Stability/Carene Table"：core/marine.js 复刻 DAVE marine.carene_table（delta_draft=1e-3、delta_roll=1°、delta_pitch=0.3° 有限差分），吃水 0.25–9 m 共 19 行，V/CoB/CoF 与 DAVE 一致，14/14 PASS',
           'ex31 DAVEcore 核心功能复现对照（core/davecore.js)：7 组 DAVEcore 功能全部落地——求解器/DAG 正向运动学/trimesh 水静力/Tank 破损舱（free_flooding+permeability+cog_when_full)/悬链线与接触（新增 ContactMesh 立体角判内）/HydSpring+SPMT 等节点工厂/state_update；另用 pymeshup 式水线切片 waterplaneProps 独立交叉校验 carene（Awl/CoF/BM T=I_T/V=26.709 与 DAVE 表 26.7018 一致)，15/15 PASS',
+          'ex32 DAVE 核心概念与术语（core/concepts.js)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学 frameWorld、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量，演示场景静力收敛，13/13 PASS',
         ] },
         { t: 'p', s: '每个算例由 tools/run_examples.mjs 自动运行并做程序化 PASS/FAIL 校核，同时渲染 1280×800 截图存入 screenshots/，结果写入 app/verification_data.js 与 docs/verification_report.{md,html}，可在 App 的“验证”页卡查看。' },
       ] },
@@ -224,7 +241,7 @@ export const DOC_SECTIONS = [
   {
     id: 'usage', title: '9. 使用指南', children: [
       { h: '9.1 本地运行', level: 2, body: [
-        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 31 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
+        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 32 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
         { t: 'p', s: 'App 完全离线运行：3D 视图、算例仿真、验证表、文档、流程图、下载面板均为本地模块，无任何外部请求。' },
         { t: 'ul', items: ['3D 视图可点击拾取对象（船体/缆节点/POI)，左侧场景树同步高亮；无 WebGL 时自动回退显示软件渲染截图', '左侧面板：场景树(Scene DAG)、属性检查器(实时 q/张力/残差)、环境滑杆(波高/周期/波向/海流/风速)、绞车 L0 滑杆', '导入/导出：⬆ 导入 .dave/.py/JSON 模型文件（.dave 经 core/dave_import.js 进 Scene DAG)，⬇ 导出模型 JSON(DAVE 式)/OrcaFlex YAML/DAVE py/当前画面 PNG；URL 参数 ?ex=ex07 直达算例', '“🧪 重跑校核”按钮在浏览器内以与 runner 相同的参数重跑该算例全部校核项并显示 PASS/FAIL', '底部时序图图例可点击显示/隐藏对应通道；播放支持 0.25–4× 速度与时间 scrubber'] },
       ] },
@@ -232,7 +249,7 @@ export const DOC_SECTIONS = [
         { t: 'code', s: 'pip install python-docx pillow reportlab fonttools brotli\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG)\nnpm run docs:pdf       # tools/build_pdf.py  → docs/OrcaFlex_DAVE_实现文档.pdf（同源数据的 PDF 副本，内嵌 NotoSansSC 中文字体）' },
       ] },
       { h: '9.3 目录结构', level: 2, body: [
-        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 31 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
+        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 32 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照 + ex32 DAVE 核心概念与术语，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
       ] },
     ],
   },

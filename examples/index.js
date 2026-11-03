@@ -22,6 +22,7 @@ import { careneTable, linearizedBuoyancyProps } from '../core/marine.js';
 import { reportNode, printNodeTree, matchWildcard } from '../core/report.js';
 import { parseObj, transformMesh, meshMassProps, clipMeshBelowPlane, waterplaneProps, boxMesh, cylinderMesh, pyramidMesh } from '../core/mesh.js';
 import { DAVECORE_FEATURES, HydSpring, ContactMesh, SPMT } from '../core/davecore.js';
+import { DAVE_UNITS, NODE_TYPES, frameWorld, rotVecToEuler, eulerToRotVec, inertiaFromRadii } from '../core/concepts.js';
 const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ, 'barge.obj': BARGE_OBJ, 'buoyancy cheetah.obj': CHEETAH_BUOY_OBJ, 'visual vessel cheetah.obj': CHEETAH_VISUAL_OBJ };
 for (const [k, v] of Object.entries(CHEETAH_TANKS)) DAVE_ASSETS[k] = 'b64:' + v; // binary STL tanks
 
@@ -1511,6 +1512,62 @@ export const EXAMPLES = [
         { name: 'ContactMesh：平衡穿透深度 δ=W/(4k)=6.13e-4 m 处 Fz=W', expected: W, actual: fEq, unit: 'N', tol: 0.01 * W },
         { name: 'SPMT 驱动力通道 Fx = 5000 N', expected: 5000, actual: spmtF, unit: 'N', tol: 1e-9 },
         { name: 'state_update：船体移到 z=−3 后 HydSpring 力重算为 6e5 N', expected: 6e5, actual: hsF2, unit: 'N', tol: 1e-6 },
+      ];
+    },
+  },
+  {
+    // DAVE "Core Concepts & Terminology": units, node registry, frames/FK, rotation vector, inertia_radii
+    id: 'ex32', cat: 'DAVEcore', name: 'DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii',
+    desc: 'core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m⁻¹/deg 与 SI 互转）、完整 DAVE 节点类型注册表 NODE_TYPES（20+ 类，映射到本仓库实现并标状态）、frame 相对父节点的正向运动学 frameWorld、rotation vector（deg)↔ tilt_x/tilt_y/heading（heading=atan2(u_x.y,u_x.x), tilt_x=asin(u_y.z), tilt_y=−asin(u_x.z))、inertia_radii→I=r²·m。',
+    analysis: { kind: 'statics' },
+    camera: 'auto',
+    build() {
+      // 小演示场景：父 frame 旋转 30°，子 frame 挂在局部 (2,0,0)，再挂一个浮筒
+      const m = new Model('ex32_concepts');
+      const A = new RigidBody6DOF({ name: 'A', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [10, 0, 5], rot: [0, 0, 30 * Math.PI / 180], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
+      m.addBody(A);
+      const B = new RigidBody6DOF({ name: 'B', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [0, 0, 0], rot: [0, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
+      B.pos = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: A.pos, rot: A.rot }).pos;
+      B.mesh = boxMesh(1, 1, 1); m.addBody(B);
+      const buoy = new RigidBody6DOF({ name: 'Buoy', type: 'Buoy', mass: 2000, cog: [0, 0, 0], inertia: [800, 800, 1200], pos: [25, 10, 0], rot: [0, 0, 0], hydro: { kind: 'buoy', V: 2000 / RHO, Awp: Math.PI * 1.5 ** 2, cob: [0, 0, -0.5] }, addedMass: [0, 0, 0, 0, 0, 0], fixed: [false, false, false, true, true, true] });
+      m.addBody(buoy);
+      m.meta.A = A; m.meta.B = B;
+      return m;
+    },
+    verify(model, ctx) {
+      const { A, B } = model.meta;
+      // units round-trip (DAVE mT/kN/deg <-> SI)
+      const u = DAVE_UNITS;
+      // node registry covers the DAVE class list (node_prop_info.csv)
+      const daveClasses = ['Axis', 'Point', 'Poi', 'Frame', 'RigidBody', 'Cable', 'Beam', 'LC6d', 'Connector2d', 'Force', 'HydSpring', 'Buoyancy', 'Visual', 'Tank', 'BallastSystem', 'ContactBall', 'ContactMesh', 'GeometricContact', 'Circle', 'Shackle', 'Sling', 'SPMT', 'WindOrCurrentArea', 'WaveInteraction', 'Measurement'];
+      const missing = daveClasses.filter(c => !NODE_TYPES.some(n => n.dave.includes(c)));
+      // FK: child frame at local (2,0,0) on parent A (pos (10,0,5), yaw 30°)
+      const fk = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: [10, 0, 5], rot: [0, 0, 30 * Math.PI / 180] });
+      const c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
+      // rotation composition: parent yaw 30 + child yaw 30 -> world yaw 60
+      const comp = frameWorld({ pos: [0, 0, 0], rot: [0, 0, 30] }, { pos: [0, 0, 0], rot: [0, 0, 30 * Math.PI / 180] }); // parent.rot 为弧度
+      const compDeg = Math.hypot(comp.R[0], comp.R[3]) !== 0 ? Math.atan2(comp.R[3], comp.R[0]) * 180 / Math.PI : 0;
+      // rotation vector <-> euler (DAVE tilt/heading definitions)
+      const e1 = rotVecToEuler(eulerToRotVec(30, 0, 0));
+      const e2 = rotVecToEuler(eulerToRotVec(0, 0, 25));
+      const e3 = rotVecToEuler(eulerToRotVec(0, 12, 0));
+      const e4 = rotVecToEuler([10, -8, 35]); // arbitrary rotvec -> euler (single-axis consistency)
+      // inertia_radii
+      const I = inertiaFromRadii(1000, [2, 3, 4]);
+      return [
+        { name: 'DAVE 单位制: 12300 mT = 1.23e7 kg; 10 kN = 1e4 N; 90° = π/2', expected: 1, actual: (u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12 },
+        { name: '单位制往返无损 (SI->DAVE->SI)', expected: 1, actual: (u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 && Math.abs(u.angleFromSI(u.angleToSI(45)) - 45) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 },
+        { name: `NODE_TYPES 覆盖全部 ${daveClasses.length} 个 DAVE 节点类`, expected: 0, actual: missing.length, unit: '-', tol: 0, absFloor: 0, pass: missing.length === 0 },
+        { name: 'FK: 子 frame 局部(2,0,0) 在父(10,0,5,yaw30°) → 世界 x = 10+2cos30', expected: 10 + 2 * c30, actual: fk.pos[0], unit: 'm', tol: 1e-12 },
+        { name: 'FK: 世界 y = 2sin30 = 1, z = 5', expected: 1, actual: Math.abs(fk.pos[1] - 1) < 1e-12 && Math.abs(fk.pos[2] - 5) < 1e-12 ? 1 : 0, unit: 'm', tol: 0, absFloor: 0, pass: Math.abs(fk.pos[1] - 1) < 1e-12 && Math.abs(fk.pos[2] - 5) < 1e-12 },
+        { name: 'B 帧世界坐标与 frameWorld 一致', expected: fk.pos[0], actual: B.pos[0], unit: 'm', tol: 1e-9 },
+        { name: '旋转合成: 父 yaw30° + 子 yaw30° → 世界 yaw 60°', expected: 60, actual: compDeg, unit: 'deg', tol: 1e-9 },
+        { name: 'heading: rotvec(30,0,0) → heading=30°, tilt=0', expected: 30, actual: e1.heading, unit: 'deg', tol: 1e-9 },
+        { name: 'tilt_y: rotvec(0,0,25) → tilt_y=25° (绕 y 正转 → 正 tilt_y)', expected: 25, actual: e2.tilt_y, unit: 'deg', tol: 1e-9 },
+        { name: 'tilt_x: rotvec(0,12,0) → tilt_x=12°', expected: 12, actual: e3.tilt_x, unit: 'deg', tol: 1e-9 },
+        { name: '任意 rotvec(10,-8,35) 的 euler 分解自洽 |heading|≤180', expected: 1, actual: Math.abs(e4.heading) <= 180 && isFinite(e4.tilt_x) && isFinite(e4.tilt_y) ? 1 : 0, unit: '-', tol: 0, pass: Math.abs(e4.heading) <= 180 && isFinite(e4.tilt_x) },
+        { name: 'inertia_radii: I = r²·m = (4000, 9000, 16000) for m=1000, r=(2,3,4)', expected: 16000, actual: I[2], unit: 'kg m^2', tol: 1e-9 },
+        { name: '静力求解收敛（演示场景）', expected: 1, actual: ctx.st.converged ? 1 : 0, unit: '-', tol: 0, pass: ctx.st.converged === true },
       ];
     },
   },

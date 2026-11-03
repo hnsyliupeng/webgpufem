@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T04:48:49.297Z
+生成时间: 2026-11-03T05:11:07.294Z
 
 总体: **全部 PASS**
 
@@ -37,6 +37,7 @@
 | ex29 | DAVE-notebooks 04 Reporting：Cheetah 节点属性报告（print_node_tree + solve_statics + report 通配符） | 8.2e-9 | - | ✅ PASS |
 | ex30 | DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5) | 0.0e+0 | - | ✅ PASS |
 | ex31 | DAVEcore 核心功能复现对照：求解器/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步 + pymeshup 式水线切片 | 1.5e+2 | - | ✅ PASS |
+| ex32 | DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii | 0.0e+0 | - | ✅ PASS |
 
 ## 详细校核项
 
@@ -506,4 +507,26 @@ core/davecore.js 按 DAVEcore（Scene._vfc 的 C++ 后端）公开文档的功�
 | state_update：船体移到 z=−3 后 HydSpring 力重算为 6e5 N | 600000.0000 | 600000.0000 | N | 1.000e-6 | PASS |
 
 截图: ![ex31](screenshots/ex31.png)
+
+### ex32 DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii
+
+core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m⁻¹/deg 与 SI 互转）、完整 DAVE 节点类型注册表 NODE_TYPES（20+ 类，映射到本仓库实现并标状态）、frame 相对父节点的正向运动学 frameWorld、rotation vector（deg)↔ tilt_x/tilt_y/heading（heading=atan2(u_x.y,u_x.x), tilt_x=asin(u_y.z), tilt_y=−asin(u_x.z))、inertia_radii→I=r²·m。
+
+| 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
+|---|---|---|---|---|---|
+| DAVE 单位制: 12300 mT = 1.23e7 kg; 10 kN = 1e4 N; 90° = π/2 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| 单位制往返无损 (SI->DAVE->SI) | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| NODE_TYPES 覆盖全部 25 个 DAVE 节点类 | 0.0000 | 0.0000 | - | 0.0000 | PASS |
+| FK: 子 frame 局部(2,0,0) 在父(10,0,5,yaw30°) → 世界 x = 10+2cos30 | 11.7321 | 11.7321 | m | 1.000e-12 | PASS |
+| FK: 世界 y = 2sin30 = 1, z = 5 | 1.0000 | 1.0000 | m | 0.0000 | PASS |
+| B 帧世界坐标与 frameWorld 一致 | 11.7321 | 11.7321 | m | 1.000e-9 | PASS |
+| 旋转合成: 父 yaw30° + 子 yaw30° → 世界 yaw 60° | 60.0000 | 60.0000 | deg | 1.000e-9 | PASS |
+| heading: rotvec(30,0,0) → heading=30°, tilt=0 | 30.0000 | 30.0000 | deg | 1.000e-9 | PASS |
+| tilt_y: rotvec(0,0,25) → tilt_y=25° (绕 y 正转 → 正 tilt_y) | 25.0000 | 25.0000 | deg | 1.000e-9 | PASS |
+| tilt_x: rotvec(0,12,0) → tilt_x=12° | 12.0000 | 12.0000 | deg | 1.000e-9 | PASS |
+| 任意 rotvec(10,-8,35) 的 euler 分解自洽 |heading|≤180 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| inertia_radii: I = r²·m = (4000, 9000, 16000) for m=1000, r=(2,3,4) | 16000.0000 | 16000.0000 | kg m^2 | 1.000e-9 | PASS |
+| 静力求解收敛（演示场景） | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+
+截图: ![ex32](screenshots/ex32.png)
 
