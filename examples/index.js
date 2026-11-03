@@ -20,7 +20,8 @@ import CHEETAH_VISUAL_OBJ from './assets/cheetah_visual.obj.js';
 import CHEETAH_TANKS from './assets/cheetah_tanks.stl.js';
 import { careneTable, linearizedBuoyancyProps } from '../core/marine.js';
 import { reportNode, printNodeTree, matchWildcard } from '../core/report.js';
-import { parseObj, transformMesh, meshMassProps, clipMeshBelowPlane, boxMesh, cylinderMesh, pyramidMesh } from '../core/mesh.js';
+import { parseObj, transformMesh, meshMassProps, clipMeshBelowPlane, waterplaneProps, boxMesh, cylinderMesh, pyramidMesh } from '../core/mesh.js';
+import { DAVECORE_FEATURES, HydSpring, ContactMesh, SPMT } from '../core/davecore.js';
 const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ, 'barge.obj': BARGE_OBJ, 'buoyancy cheetah.obj': CHEETAH_BUOY_OBJ, 'visual vessel cheetah.obj': CHEETAH_VISUAL_OBJ };
 for (const [k, v] of Object.entries(CHEETAH_TANKS)) DAVE_ASSETS[k] = 'b64:' + v; // binary STL tanks
 
@@ -1406,6 +1407,110 @@ export const EXAMPLES = [
         { name: 'V(0.25) 量级 ≈ Awl×吃水（浅吃水线性）', expected: r25['Awl [m2]'] * 0.25, actual: r25['Displacement [m3]'], unit: 'm^3', tol: 0.25 * r25['Awl [m2]'] * 0.25 },
         { name: 'V(9.0) 接近船体总容积上限（甲板 21.55 m 未没）', expected: 1, actual: r9['Displacement [m3]'] < 116185 ? 1 : 0, unit: '-', tol: 0, pass: r9['Displacement [m3]'] < 116185 },
         { name: 'kHeave(6.75) = Awl·ρ·g', expected: r675['Awl [m2]'] * RHO * 9.80665 / 1000, actual: rows.find(r => Math.abs(r['Draft [m]'] - 6.75) < 1e-9)['kHeave [kN/m]'], unit: 'kN/m', tol: 1e-6 },
+      ];
+    },
+  },
+  {
+    // DAVEcore capability surface (the C++ backend's documented function groups) reproduced in JS
+    id: 'ex31', cat: 'DAVEcore', name: 'DAVEcore 核心功能复现对照：求解器/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步 + pymeshup 式水线切片',
+    desc: 'core/davecore.js 按 DAVEcore（Scene._vfc 的 C++ 后端）公开文档的功能分组做纯 JS 复现并登记（DAVECORE_FEATURES): 静力动力求解、节点 DAG 正向运动学、trimesh 水静力切割、Tank 液舱（free_flooding/permeability/cog_when_full)、悬链线与接触（新增 ContactMesh)、HydSpring/SPMT 等节点工厂、state_update 状态同步；另以 pymeshup 式水线切片 waterplaneProps 对 cheetah 船体做 Awl/CoF/BM T=I_T/V 的独立交叉校验（与 DAVE Carene 表一致)。',
+    analysis: { kind: 'statics' },
+    camera: 'auto',
+    build() {
+      const m = new Model('ex31_davecore_features');
+      // 浮箱 + 网格浮力 + free_flooding 破损舱 + HydSpring + 系泊浮标
+      const barge = new RigidBody6DOF({
+        name: 'barge', type: 'Vessel', mass: 0.6 * RHO * 20 * 10 * 4, cog: [0, 0, 0],
+        inertia: [1e7, 1e8, 1e8], pos: [0, 0, -2], rot: [0, 0, 0],
+        hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [false, false, false, true, true, true],
+      });
+      barge.mesh = boxMesh(20, 10, 4);
+      m.addBody(barge);
+      m.addElement(new BuoyancyMesh({ name: 'buoy', body: barge, mesh: barge.mesh, rho: RHO }));
+      // 破损舱（free flooding): 4x4x4 罐在船内局部 z 中心 -1
+      const tankMesh = transformMesh(boxMesh(4, 4, 4), { offset: [0, 0, -1] });
+      const tank = new Tank({ name: 'damaged_tank', body: barge, V: 64, fill: 0, rho: RHO, cog: [0, 0, -1], mesh: tankMesh, freeFlooding: true, permeability: 0.8 });
+      m.addElement(tank);
+      m.addElement(new HydSpring({ name: 'hydspring', body: barge, k: 2e5 })); // N/m
+      // 系泊浮标
+      const buoyBody = new RigidBody6DOF({
+        name: 'Buoy', type: 'Buoy', mass: 2000, cog: [0, 0, 0], inertia: [800, 800, 1200],
+        pos: [40, 0, 0], rot: [0, 0, 0], hydro: { kind: 'buoy', V: 2000 / RHO, Awp: Math.PI * 1.5 ** 2, cob: [0, 0, -0.5] },
+        addedMass: [0, 0, 0, 0, 0, 0], fixed: [false, false, false, true, true, true],
+      });
+      m.addBody(buoyBody);
+      const line = new Line({
+        name: 'Mooring', nSeg: 20, length: 45, d: 0.05, massPerLen: 8, EA: 1e8,
+        endA: { type: 'vessel', body: barge, localPoint: [10, 0, 2] },
+        endB: { type: 'vessel', body: buoyBody, localPoint: [0, 0, 1] },
+      });
+      m.addLine(line);
+      m.meta.barge = barge; m.meta.tank = tank; m.meta.buoy = buoyBody;
+      return m;
+    },
+    verify(model, ctx) {
+      const { barge, tank } = model.meta;
+      // --- 1) DAVEcore capability registry complete ---
+      const needIds = ['solver', 'fk', 'hydrostatics', 'tank', 'catenary', 'nodes', 'state'];
+      const missing = needIds.filter(id => !DAVECORE_FEATURES.some(f => f.id === id && f.impl && f.group));
+      // --- 2) pymeshup-style waterplane slice cross-checks carene on the cheetah hull ---
+      const cheetah = loadCheetah('ex31_cheetah_ref');
+      const cbuoy = cheetah.elements.find(e => e.type === 'Buoyancy');
+      const wp = waterplaneProps(cbuoy.mesh, 6.75);
+      const lin = linearizedBuoyancyProps(cbuoy.mesh, 6.75);
+      const bmtDirect = wp.Ix_c / lin.displacement;  // BM T = I_T / V (exact linearized)
+      const bmlDirect = wp.Iy_c / lin.displacement;  // BM L = I_L / V
+      // --- 3) Tank free_flooding / permeability / cog_when_full ---
+      barge.pos = [0, 0, 1]; barge.rot = [0, 0, 0]; barge.q = [0, 0, 0, 0, 0, 0];
+      refreshExternal(model, 0);
+      const fluid = tank.freeFloodedFluid();
+      // 船体原点在 z=+1 → 世界水线 z=0 = 船内局部 z=-1 → 罐(局部 z∈[-3,1]) 被淹到 -1 → 4*4*2=32 m3 ×0.8
+      const tankP1 = new Tank({ name: 't_p1', body: barge, V: 64, rho: RHO, cog: [0, 0, -1], mesh: tank.mesh, freeFlooding: true, permeability: 1 });
+      const fluidP1 = tankP1.freeFloodedFluid().V;
+      const cogFull = tank.cogWhenFull;
+      // --- 4) HydSpring force at known draft ---
+      const hs = model.elements.find(e => e.type === 'HydSpring');
+      barge.pos = [0, 0, -2]; barge.q = [0, 0, 0, 0, 0, 0];
+      refreshExternal(model, 0);
+      const hsF = hs.lastF[2];
+      // --- 5) ContactMesh statics on a dedicated mini model: cube rests on slab top (world z=0) → center z≈1 ---
+      const mini = new Model('ex31_contact');
+      const slab = new RigidBody6DOF({ name: 'slab', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [0, 0, -1], rot: [0, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
+      slab.mesh = boxMesh(20, 20, 2); mini.addBody(slab);
+      const cube = new RigidBody6DOF({ name: 'cube', type: 'RigidBody', mass: 500, cog: [0, 0, 0], inertia: [200, 200, 200], pos: [0, 0, 2.5], rot: [0, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, false, true, true, true] });
+      cube.mesh = boxMesh(2, 2, 2); mini.addBody(cube); // 从板上方落下，停在板顶 z≈1
+      const cm = new ContactMesh({ name: 'cube_on_slab', body: cube, mesh: cube.mesh, staticBody: slab, k: 2e6 });
+      mini.addElement(cm);
+      const spmt = new SPMT({ name: 'spmt_drive', body: cube, drive: [5000, 0, 0] });
+      mini.addElement(spmt);
+      // direct contact-force checks (penalty contact is discontinuous -> avoid Newton here)
+      const setZ = (z) => { cube.pos = [0, 0, z]; cube.q = [0, 0, 0, 0, 0, 0]; refreshExternal(mini, 0); return cm.lastF[2]; };
+      const W = 500 * 9.80665;
+      const fAbove = setZ(1.5);            // 底面离板顶 0.5 m：无接触
+      const fPen = setZ(0.8);              // 穿透 0.2 m：4 顶点 × k×0.2 向上
+      const delta = W / (4 * 2e6);         // 平衡穿透深度 δ = W/(4k)
+      const fEq = setZ(1 - delta);         // 在平衡穿透处 Fz ≈ W
+      const spmtF = (refreshExternal(mini, 0), spmt.lastF[0]);
+      // --- 7) state sync: moving the body changes recomputed forces ---
+      barge.pos = [0, 0, -3]; barge.q = [0, 0, 0, 0, 0, 0];
+      refreshExternal(model, 0);
+      const hsF2 = hs.lastF[2];
+      return [
+        { name: 'DAVECORE_FEATURES 覆盖全部 7 组核心功能（求解/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步）', expected: 0, actual: missing.length, unit: '-', tol: 0, absFloor: 0, pass: missing.length === 0 },
+        { name: '水线切片 Awl(6.75) = 8821.4 m²（与 carene 有限差分一致）', expected: lin.Awl, actual: wp.A, unit: 'm^2', tol: 0.005 * lin.Awl },
+        { name: '水线切片漂心 CoF x(6.75) = 98.945 m（DAVE carene 表）', expected: 98.945439, actual: wp.c[0], unit: 'm', tol: 0.01 },
+        { name: '水线切片 CoF y(6.75) ≈ 0（对称）', expected: 0, actual: wp.c[1], unit: 'm', tol: 1e-3, absFloor: 1e-3 },
+        { name: 'BM T = I_T/V = 26.709 m（DAVE carene 表 26.7018，直接法）', expected: 26.701756, actual: bmtDirect, unit: 'm', tol: 0.01 * 26.701756 },
+        { name: 'BM L = I_L/V ≈ 530 m（DAVE carene 表 530.196，直接法）', expected: 530.195841, actual: bmlDirect, unit: 'm', tol: 0.03 * 530.195841 },
+        { name: '破损舱 free_flooding 液量 = 切割体积×permeability = 32×0.8 = 25.6 m³', expected: 25.6, actual: fluid.V, unit: 'm^3', tol: 1e-6 },
+        { name: 'permeability=1 时液量 = 32 m³（渗透率缩放）', expected: 32, actual: fluidP1, unit: 'm^3', tol: 1e-6 },
+        { name: 'cog_when_full = 罐网格形心 (0,0,−1)', expected: -1, actual: cogFull[2], unit: 'm', tol: 1e-9, absFloor: 1e-9 },
+        { name: 'HydSpring: z=−2 m 时 Fz = K·2 = 4e5 N 向上', expected: 2e5 * 2, actual: hsF, unit: 'N', tol: 1e-6 },
+        { name: 'ContactMesh：方块在板上方 0.5 m 时无接触力', expected: 0, actual: fAbove, unit: 'N', tol: 1, absFloor: 1 },
+        { name: 'ContactMesh：穿透 0.2 m 时 Fz = 4·k·0.2 = 1.6e6 N 向上', expected: 4 * 2e6 * 0.2, actual: fPen, unit: 'N', tol: 0.01 * 1.6e6 },
+        { name: 'ContactMesh：平衡穿透深度 δ=W/(4k)=6.13e-4 m 处 Fz=W', expected: W, actual: fEq, unit: 'N', tol: 0.01 * W },
+        { name: 'SPMT 驱动力通道 Fx = 5000 N', expected: 5000, actual: spmtF, unit: 'N', tol: 1e-9 },
+        { name: 'state_update：船体移到 z=−3 后 HydSpring 力重算为 6e5 N', expected: 6e5, actual: hsF2, unit: 'N', tol: 1e-6 },
       ];
     },
   },

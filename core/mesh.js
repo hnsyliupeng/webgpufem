@@ -32,6 +32,71 @@ export function parseObj(text) {
   return { pos, tri };
 }
 
+// ---------- waterplane polygon at height z: loops, area, centroid, second moments ----------
+// (pymeshup-style slicing; used for independent Awl/CoF/BM cross-checks of the carene table)
+export function waterplaneLoops(m, z) {
+  const segs = [];
+  for (const [i, j, k] of m.tri) {
+    const vs = [m.pos[i], m.pos[j], m.pos[k]];
+    const ds = vs.map(p => p[2] - z);
+    const pts = [];
+    for (let a = 0; a < 3; a++) {
+      const b = (a + 1) % 3;
+      if ((ds[a] <= 0) !== (ds[b] <= 0)) {
+        const t = ds[a] / (ds[a] - ds[b]);
+        pts.push([vs[a][0] + t * (vs[b][0] - vs[a][0]), vs[a][1] + t * (vs[b][1] - vs[a][1])]);
+      }
+    }
+    if (pts.length === 2) segs.push(pts);
+  }
+  // chain segments into loops; 1e-4 quantization is far above float noise (~1e-13) for these coords
+  const key = p => p[0].toFixed(4) + ',' + p[1].toFixed(4);
+  const map = new Map();
+  segs.forEach((sg, i) => {
+    for (const e of [0, 1]) { const k = key(sg[e]); if (!map.has(k)) map.set(k, []); map.get(k).push(i); }
+  });
+  const used = segs.map(() => false);
+  const loops = [];
+  for (let s0 = 0; s0 < segs.length; s0++) {
+    if (used[s0]) continue;
+    const loop = [segs[s0][0]];
+    let cur = segs[s0][1]; used[s0] = true;
+    for (let guard = 0; guard < 200000; guard++) {
+      if (key(cur) === key(loop[0])) break;
+      loop.push(cur);
+      const cands = (map.get(key(cur)) || []).filter(i => !used[i]);
+      if (!cands.length) break;
+      const sg = segs[cands[0]]; used[cands[0]] = true;
+      cur = key(sg[0]) === key(cur) ? sg[1] : sg[0];
+    }
+    if (loop.length >= 3) loops.push(loop);
+  }
+  return loops;
+}
+
+// { A, c:[x,y], Ix_c (∫y^2 dA about centroid -> BM T numerator), Iy_c (∫x^2 dA -> BM L), Ixy_c }
+export function waterplaneProps(m, z) {
+  const loops = waterplaneLoops(m, z);
+  let A = 0, Mx = 0, My = 0, Ix = 0, Iy = 0, Ixy = 0;
+  for (const loop of loops) {
+    const n = loop.length;
+    let a = 0, sx = 0, sy = 0;
+    for (let i = 0; i < n; i++) {
+      const p = loop[i], q = loop[(i + 1) % n];
+      const cr = p[0] * q[1] - q[0] * p[1];
+      a += cr; sx += (p[0] + q[0]) * cr; sy += (p[1] + q[1]) * cr;
+      Ix += (p[1] * p[1] + p[1] * q[1] + q[1] * q[1]) * cr / 12;
+      Iy += (p[0] * p[0] + p[0] * q[0] + q[0] * q[0]) * cr / 12;
+      Ixy += (2 * p[0] * p[1] + p[0] * q[1] + q[0] * p[1] + 2 * q[0] * q[1]) * cr / 24;
+    }
+    a /= 2;
+    A += a; Mx += sx / 6; My += sy / 6;
+  }
+  if (A < 0) { A = -A; Ix = -Ix; Iy = -Iy; Ixy = -Ixy; Mx = -Mx; My = -My; }
+  const cx = Mx / A, cy = My / A;
+  return { A, c: [cx, cy], Ix_c: Ix - A * cy * cy, Iy_c: Iy - A * cx * cx, Ixy_c: Ixy - A * cx * cy };
+}
+
 // ---------- STL (binary or ASCII), as used by DAVE trimesh.load_file for tank meshes ----------
 export function parseStl(text) {
   // returns { pos, tri } like parseObj

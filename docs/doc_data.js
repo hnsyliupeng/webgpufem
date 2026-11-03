@@ -165,7 +165,24 @@ export const DOC_SECTIONS = [
     ],
   },
   {
-    id: 'examples', title: '8. 验证算例（30 个，全部 PASS)', children: [
+    id: 'davecore', title: '6A.5 DAVEcore 核心功能复现（建模模块 core/davecore.js)', children: [
+      { h: '6A.5 DAVEcore 功能对照表', level: 2, body: [
+      { t: 'p', s: 'DAVEcore 是 DAVE 的 C++ 后端（import DAVEcore as DC，由 Scene._vfc 持有；编译产物，不在本仓库源码中）。我们按其公开文档的功能分组做纯 JS 复现，并登记在 DAVECORE_FEATURES 中（ex31 逐项校验，15/15 PASS):' },
+      { t: 'table', cols: ['DAVEcore 功能组', '本仓库实现'], rows: [
+        ['1. 静力/动力平衡求解（BackgroundSolver)', 'core/solvers.js: computeStatics / runDynamics / goalSeek'],
+        ['2. 节点 DAG 几何与正向运动学（DC.Axis 图）', 'core/scene.js (SNode DAG) + RigidBody6DOF.worldOrigin/rotVec'],
+        ['3. Buoyancy 网格水线切割 → displacement/cob', 'core/mesh.js clipMeshBelowPlane + elements.js BuoyancyMesh'],
+        ['4. Tank 液舱：液面切割、cog、free_flooding、permeability', 'elements.js Tank.freeFloodedFluid()（网格按世界水线切割×permeability)、cogWhenFull'],
+        ['5. 悬链线与接触（Cable/ContactBall/ContactMesh/GeometricContact)', 'core/line.js + elements.js Hinge/ContactBall + davecore.js ContactMesh（立体角缠绕数判内+罚函数）'],
+        ['6. 核心节点工厂 new_*（RigidBody/Beam/Force/HydSpring/LC6d/Connector2d/SPMT/WindArea/CurrentArea/SupportPoint)', 'core/elements.js + core/env.js + davecore.js HydSpring/SPMT + dave_import.js'],
+        ['7. 状态同步 state_update（重算所有力/浮心/舱液重心）', 'core/solvers.js refreshExternal / applyElements'],
+        ['pymeshup 网格操作（load/transform/slice/clip/mass props)', 'core/mesh.js: parseObj/parseStlBase64/transformMesh/waterplaneProps/waterplaneLoops/clipMeshBelowPlane/meshMassProps'],
+      ]},
+      { t: 'p', s: '交叉校验：waterplaneProps 对 cheetah 船体在吃水 6.75 m 的水线切片给出 Awl=8821.43 m²、CoF=(98.9449, −7.7e-7) m、BM T=I_T/V=26.709 m、BM L=I_L/V=526.1 m —— 与 DAVE Carene 表（CoF/BM T 表值 98.945/26.7018）一致；破损舱 free_flooding 液量=切割体积×permeability、平衡穿透深度 δ=W/(4k) 等均在 ex31 中断言。' },
+      ]},
+    ]},
+    {
+    id: 'examples', title: '8. 验证算例（31 个，全部 PASS)', children: [
       { h: '8.1 算例清单', level: 2, body: [
         { t: 'ul', items: [
           'ex01 空中弹性悬链线 vs 解析解（端部张力/垂深）',
@@ -198,6 +215,7 @@ export const DOC_SECTIONS = [
           'ex28 网格几何（core/mesh.js)：OBJ解析+图元+精确体积/形心/惯性，BuoyancyMesh 网格浮力任意姿态水线切割（半沉浮箱吃水/倾角回正，13 项校验）',
           'ex29 DAVE-notebooks "04 Reporting/Reporting node properties"：直接导入 DAVE 官方 cheetah.dave（网格浮力 buoyancy cheetah.obj + 24 个 STL 压载罐 + 船体 visual 网格），print_node_tree 与 notebook 输出逐行一致，solve_statics 收敛（残差 8e-9)，report() 支持 */? 通配符，6.75 m 吃水排水量 53278 m³（DAVE 标注 53290.760)，15/15 PASS',
           'ex30 DAVE-notebooks "10 Buoayncy and Stability/Carene Table"：core/marine.js 复刻 DAVE marine.carene_table（delta_draft=1e-3、delta_roll=1°、delta_pitch=0.3° 有限差分），吃水 0.25–9 m 共 19 行，V/CoB/CoF 与 DAVE 一致，14/14 PASS',
+          'ex31 DAVEcore 核心功能复现对照（core/davecore.js)：7 组 DAVEcore 功能全部落地——求解器/DAG 正向运动学/trimesh 水静力/Tank 破损舱（free_flooding+permeability+cog_when_full)/悬链线与接触（新增 ContactMesh 立体角判内）/HydSpring+SPMT 等节点工厂/state_update；另用 pymeshup 式水线切片 waterplaneProps 独立交叉校验 carene（Awl/CoF/BM T=I_T/V=26.709 与 DAVE 表 26.7018 一致)，15/15 PASS',
         ] },
         { t: 'p', s: '每个算例由 tools/run_examples.mjs 自动运行并做程序化 PASS/FAIL 校核，同时渲染 1280×800 截图存入 screenshots/，结果写入 app/verification_data.js 与 docs/verification_report.{md,html}，可在 App 的“验证”页卡查看。' },
       ] },
@@ -206,7 +224,7 @@ export const DOC_SECTIONS = [
   {
     id: 'usage', title: '9. 使用指南', children: [
       { h: '9.1 本地运行', level: 2, body: [
-        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 30 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
+        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 31 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
         { t: 'p', s: 'App 完全离线运行：3D 视图、算例仿真、验证表、文档、流程图、下载面板均为本地模块，无任何外部请求。' },
         { t: 'ul', items: ['3D 视图可点击拾取对象（船体/缆节点/POI)，左侧场景树同步高亮；无 WebGL 时自动回退显示软件渲染截图', '左侧面板：场景树(Scene DAG)、属性检查器(实时 q/张力/残差)、环境滑杆(波高/周期/波向/海流/风速)、绞车 L0 滑杆', '导入/导出：⬆ 导入 .dave/.py/JSON 模型文件（.dave 经 core/dave_import.js 进 Scene DAG)，⬇ 导出模型 JSON(DAVE 式)/OrcaFlex YAML/DAVE py/当前画面 PNG；URL 参数 ?ex=ex07 直达算例', '“🧪 重跑校核”按钮在浏览器内以与 runner 相同的参数重跑该算例全部校核项并显示 PASS/FAIL', '底部时序图图例可点击显示/隐藏对应通道；播放支持 0.25–4× 速度与时间 scrubber'] },
       ] },
@@ -214,7 +232,7 @@ export const DOC_SECTIONS = [
         { t: 'code', s: 'pip install python-docx pillow reportlab fonttools brotli\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG)\nnpm run docs:pdf       # tools/build_pdf.py  → docs/OrcaFlex_DAVE_实现文档.pdf（同源数据的 PDF 副本，内嵌 NotoSansSC 中文字体）' },
       ] },
       { h: '9.3 目录结构', level: 2, body: [
-        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 30 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
+        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 31 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
       ] },
     ],
   },

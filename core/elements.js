@@ -3,8 +3,8 @@
 //   createSling (rigging), Measurement. Elements attach to bodies / fixed points / scene nodes and
 //   inject forces into RigidBody6DOF.external (same channel as line end reactions), so Newton statics
 //   and dynamics pick them up automatically via solvers.applyElements().
-import { v3, rotVecToMat3 } from './math.js';
-import { clipMeshBelowPlane, meshBBox } from './mesh.js';
+import { v3, rotVecToMat3, mat3T, mat3Vec } from './math.js';
+import { clipMeshBelowPlane, meshBBox, meshMassProps } from './mesh.js';
 import { G } from './waves.js';
 import { Line } from './line.js';
 
@@ -186,17 +186,44 @@ export class ContactBall {
 }
 
 export class Tank {
-  // DAVE Tank: fluid volume V (m^3), local cog, fill fraction, fluid density.
-  // Adds weight at the tank cog (shifts vessel CoG → affects stability).
+  // DAVE Tank (DAVEcore VolumeFilling): mesh-based tank with fill fraction, permeability and
+  // free_flooding (damaged tank floods to the outside waterline). Adds fluid weight at the
+  // fluid cog (shifts vessel CoG → affects stability).
   constructor(cfg) {
     this.type = 'Tank'; this.name = cfg.name || 'Tank';
     this.body = cfg.body; this.localCog = cfg.cog || [0, 0, 0];
     this.V = cfg.V ?? 100; this.fill = cfg.fill ?? 1; this.rho = cfg.rho ?? 1025;
+    this.permeability = cfg.permeability ?? 1;   // DAVE permeability [-]
+    this.freeFlooding = cfg.freeFlooding ?? false; // 破损舱: fluid surface = outside waterline
+    this.mesh = cfg.mesh || null;                 // tank trimesh (body-local), for free_flooding / cog_when_full
   }
-  get mass() { return this.rho * this.V * this.fill; }
+  get cogWhenFull() { // DAVE cog_when_full: centroid of the full tank mesh
+    if (this.mesh) { try { return meshMassProps(this.mesh, 1).c; } catch {} }
+    return [...this.localCog];
+  }
+  // fluid volume & cog when free flooding: clip the world-placed tank mesh at the waterline
+  freeFloodedFluid() {
+    if (!this.mesh) return { V: this.V * this.fill, c: [...this.localCog] };
+    const b = this.body;
+    const R = rotVecToMat3(b.rotVec());
+    const o = b.worldOrigin();
+    const pos = this.mesh.pos.map(p => mat3Vec(R, p).map((v, i) => v + o[i]));
+    const r = clipMeshBelowPlane({ pos, tri: this.mesh.tri }, [0, 0, 1], 0);
+    const V = Math.max(0, r.V) * this.permeability;
+    const cWorld = r.V > 1e-9 ? r.c : o;
+    const Rm = mat3T(R);
+    const cLocal = mat3Vec(Rm, [cWorld[0] - o[0], cWorld[1] - o[1], cWorld[2] - o[2]]);
+    return { V, c: cLocal };
+  }
+  get mass() {
+    if (this.freeFlooding) return this.rho * this.freeFloodedFluid().V;
+    return this.rho * this.V * this.fill;
+  }
+  get fluidCog() { return this.freeFlooding ? this.freeFloodedFluid().c : [...this.localCog]; }
   apply() {
     const m = this.mass;
-    this.body.external.push({ F: [0, 0, -m * G], point: [...this.localCog] });
+    const c = this.fluidCog;
+    this.body.external.push({ F: [0, 0, -m * G], point: c });
     this.lastF = [0, 0, -m * G];
   }
 }

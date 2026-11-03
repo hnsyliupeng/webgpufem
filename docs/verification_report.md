@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T04:33:46.381Z
+生成时间: 2026-11-03T04:48:49.297Z
 
 总体: **全部 PASS**
 
@@ -36,6 +36,7 @@
 | ex28 | 网格几何建模：OBJ解析+图元+精确体积/形心/惯性；网格浮力任意姿态水线切割 | 2.5e-13 | - | ✅ PASS |
 | ex29 | DAVE-notebooks 04 Reporting：Cheetah 节点属性报告（print_node_tree + solve_statics + report 通配符） | 8.2e-9 | - | ✅ PASS |
 | ex30 | DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5) | 0.0e+0 | - | ✅ PASS |
+| ex31 | DAVEcore 核心功能复现对照：求解器/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步 + pymeshup 式水线切片 | 1.5e+2 | - | ✅ PASS |
 
 ## 详细校核项
 
@@ -481,4 +482,28 @@ core/marine.js 按 DAVE marine.py 复刻 carene_table / calculate_linearized_buo
 | kHeave(6.75) = Awl·ρ·g | 88671.7187 | 88671.7187 | kN/m | 1.000e-6 | PASS |
 
 截图: ![ex30](screenshots/ex30.png)
+
+### ex31 DAVEcore 核心功能复现对照：求解器/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步 + pymeshup 式水线切片
+
+core/davecore.js 按 DAVEcore（Scene._vfc 的 C++ 后端）公开文档的功能分组做纯 JS 复现并登记（DAVECORE_FEATURES): 静力动力求解、节点 DAG 正向运动学、trimesh 水静力切割、Tank 液舱（free_flooding/permeability/cog_when_full)、悬链线与接触（新增 ContactMesh)、HydSpring/SPMT 等节点工厂、state_update 状态同步；另以 pymeshup 式水线切片 waterplaneProps 对 cheetah 船体做 Awl/CoF/BM T=I_T/V 的独立交叉校验（与 DAVE Carene 表一致)。
+
+| 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
+|---|---|---|---|---|---|
+| DAVECORE_FEATURES 覆盖全部 7 组核心功能（求解/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步） | 0.0000 | 0.0000 | - | 0.0000 | PASS |
+| 水线切片 Awl(6.75) = 8821.4 m²（与 carene 有限差分一致） | 8821.4624 | 8821.4267 | m^2 | 44.1073 | PASS |
+| 水线切片漂心 CoF x(6.75) = 98.945 m（DAVE carene 表） | 98.9454 | 98.9449 | m | 0.0100 | PASS |
+| 水线切片 CoF y(6.75) ≈ 0（对称） | 0.0000 | -7.712e-7 | m | 0.0010 | PASS |
+| BM T = I_T/V = 26.709 m（DAVE carene 表 26.7018，直接法） | 26.7018 | 26.7090 | m | 0.2670 | PASS |
+| BM L = I_L/V ≈ 530 m（DAVE carene 表 530.196，直接法） | 530.1958 | 526.1428 | m | 15.9059 | PASS |
+| 破损舱 free_flooding 液量 = 切割体积×permeability = 32×0.8 = 25.6 m³ | 25.6000 | 25.6000 | m^3 | 1.000e-6 | PASS |
+| permeability=1 时液量 = 32 m³（渗透率缩放） | 32.0000 | 32.0000 | m^3 | 1.000e-6 | PASS |
+| cog_when_full = 罐网格形心 (0,0,−1) | -1.0000 | -1.0000 | m | 1.000e-9 | PASS |
+| HydSpring: z=−2 m 时 Fz = K·2 = 4e5 N 向上 | 400000.0000 | 400000.0000 | N | 1.000e-6 | PASS |
+| ContactMesh：方块在板上方 0.5 m 时无接触力 | 0.0000 | 0.0000 | N | 1.0000 | PASS |
+| ContactMesh：穿透 0.2 m 时 Fz = 4·k·0.2 = 1.6e6 N 向上 | 1.600e+6 | 1.600e+6 | N | 16000.0000 | PASS |
+| ContactMesh：平衡穿透深度 δ=W/(4k)=6.13e-4 m 处 Fz=W | 4903.3250 | 4903.3250 | N | 49.0333 | PASS |
+| SPMT 驱动力通道 Fx = 5000 N | 5000.0000 | 5000.0000 | N | 1.000e-9 | PASS |
+| state_update：船体移到 z=−3 后 HydSpring 力重算为 6e5 N | 600000.0000 | 600000.0000 | N | 1.000e-6 | PASS |
+
+截图: ![ex31](screenshots/ex31.png)
 
