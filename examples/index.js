@@ -79,7 +79,7 @@ export const EXAMPLES = [
     id: 'ex01', cat: '线静力', name: '空中弹性悬链线 vs 解析解',
     desc: '两端等高固定的弹性链，静力形状/端部张力与弹性悬链线解析解对比（对应 OrcaFlex 线静力 + 解析悬链线验证 V02）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [60, -120, 40], target: [40, 0, -15] },
+    camera: 'auto',
     build() {
       const m = new Model('ex01_catenary_air');
       const line = new Line({
@@ -113,7 +113,7 @@ export const EXAMPLES = [
     id: 'ex02', cat: '系泊静力', name: '海床系泊缆 touchdown 点与锚张力',
     desc: '平坦海床上的系泊链，静力 touchdown 位置、锚端张力、顶端张力与解析悬链线+摩擦解对比（V02/V11 静力部分）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [260, -320, 80], target: [200, 0, -60] },
+    camera: 'auto',
     build() {
       const m = new Model('ex02_mooring_seabed');
       m.env.seabed = new Seabed({ depth: 100, k: 1e8, mu: 0.6, c: 1e4 });
@@ -151,7 +151,7 @@ export const EXAMPLES = [
     id: 'ex03', cat: '线动力', name: '垂直悬挂链摆动（张力=重量，摆动周期）',
     desc: '顶端固定、底端自由的链，静力顶端张力应等于全链重量；初始扰动后摆动周期与物理摆公式 2π√(2L/3g) 对比（V01/V02 动力）。',
     analysis: { kind: 'dynamics', tEnd: 40, snapDt: 0.4 },
-    camera: { pos: [25, -70, 10], target: [0, 0, -25] },
+    camera: 'auto',
     build() {
       const m = new Model('ex03_hanging_chain');
       const line = new Line({
@@ -192,7 +192,7 @@ export const EXAMPLES = [
     id: 'ex04', cat: '浮体', name: '系泊浮筒在规则波中的响应',
     desc: '圆柱浮筒 + 系泊缆，规则波作用。验证静平衡（平均升沉≈0）、平均缆张力≈静力值、升沉响应有界（V04/V09/V11）。',
     analysis: { kind: 'dynamics', tEnd: 60, snapDt: 0.5 },
-    camera: { pos: [90, -140, 50], target: [40, 0, -30] },
+    camera: 'auto',
     build() {
       const m = new Model('ex04_moored_buoy');
       m.env.seabed = new Seabed({ depth: 50, k: 1e8, mu: 0.5 });
@@ -244,7 +244,7 @@ export const EXAMPLES = [
     id: 'ex05', cat: '稳性', name: '箱型驳船水静力与 GZ 曲线',
     desc: '矩形驳船：吃水、GM 与解析公式对比，GZ 曲线（数值积分）小角度斜率 = GM，大角度仍正稳性（V04/V09，DAVE marine.py GZ 对应）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [80, -100, 50], target: [0, 0, -3] },
+    camera: 'auto',
     build() {
       const m = new Model('ex05_box_hydrostatics');
       const L = 50, B = 20, T = 5, KG = 4;
@@ -276,7 +276,7 @@ export const EXAMPLES = [
     id: 'ex06', cat: '船舶动力', name: '箱型船 heave/roll 衰减试验',
     desc: '初始 heave/roll 偏移释放，测量衰减周期与 2π√(M/K) 对比，验证附加质量与水静力刚度（V09 动力，OrcaFlex 衰减分析）。',
     analysis: { kind: 'dynamics', tEnd: 80, snapDt: 1.0 },
-    camera: { pos: [90, -110, 45], target: [0, 0, -3] },
+    camera: 'auto',
     build() {
       const m = new Model('ex06_decay');
       const L = 50, B = 20, T = 5, KG = 4;
@@ -318,7 +318,7 @@ export const EXAMPLES = [
     id: 'ex07', cat: '船舶+系泊', name: '规则波+海流中系泊船（漂移与张力统计）',
     desc: '箱型船单点系泊，规则波+幂律海流。验证平均漂移>0、平均张力≈静力、张力波动与极值（V11，OrcaFlex 时域系泊分析）。',
     analysis: { kind: 'dynamics', tEnd: 90, snapDt: 1.0 },
-    camera: { pos: [220, -300, 110], target: [140, 0, -50] },
+    camera: 'auto',
     build() {
       const m = new Model('ex07_moored_vessel_waves');
       m.env.seabed = new Seabed({ depth: 100, k: 1e8, mu: 0.6, c: 1e4 });
@@ -377,7 +377,7 @@ export const EXAMPLES = [
     id: 'ex08', cat: '吊装', name: '绞车吊放重物（张力=重量，单摆周期）',
     desc: '吊机顶点经绞车+缆索悬吊刚体。静力缆张力=重物重量；绞车收放缆过程中张力近似不变；摆动周期≈2π√(L/g)（V07 三点吊装简化/DAVE rigging）。',
     analysis: { kind: 'dynamics', tEnd: 80, snapDt: 1.0 },
-    camera: { pos: [30, -60, 25], target: [0, 0, 10] },
+    camera: 'auto',
     build() {
       const m = new Model('ex08_crane_lift');
       const load = new RigidBody6DOF({
@@ -427,7 +427,7 @@ export const EXAMPLES = [
     id: 'ex09', cat: '立管', name: 'Lazy-wave 立管静力（touchdown 与顶张力）',
     desc: '顶端固定、底部落在海床的懒波立管（含弯曲刚度）。touchdown 位置与顶张力和解析悬链线解对比（OrcaFlex riser 静力）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [120, -180, 60], target: [40, 0, -60] },
+    camera: 'auto',
     build() {
       const m = new Model('ex09_lazy_wave_riser');
       m.env.seabed = new Seabed({ depth: 100, k: 1e8, mu: 0.3, c: 1e4 });
@@ -472,7 +472,7 @@ export const EXAMPLES = [
     id: 'ex10', cat: '波浪谱+疲劳', name: 'JONSWAP 不规则波中系泊浮筒（谱矩+雨流疲劳）',
     desc: 'JONSWAP 谱离散验证（m0=Hs²/16、η 统计≈Hs/4、种子可复现），浮筒缆张力时历雨流计数 + Miner 损伤（V11/V14，OrcaFlex 疲劳分析）。',
     analysis: { kind: 'dynamics', tEnd: 300, snapDt: 5 },
-    camera: { pos: [130, -200, 70], target: [60, 0, -45] },
+    camera: 'auto',
     build() {
       const m = new Model('ex10_irregular_sea_fatigue');
       m.env.seabed = new Seabed({ depth: 80, k: 1e8, mu: 0.5 });
@@ -533,7 +533,7 @@ export const EXAMPLES = [
     id: 'ex11', cat: 'DAVE', name: 'DAVE 稳性算例 stability.py：40°横倾 GZ 校验',
     desc: '移植 DAVE 官方 examples/stability.py：箱体浮力 40×10×3，质量 515 t，KG=3 m，强制横倾 40°，支座反力矩/(m·g)=GZ，与独立网格积分参考对比（非线性浮力 Buoyancy 节点：2D 多边形裁剪求浸水面积与浮心；大角度下 boxGZ 的小角度条带公式不再适用，故用网格积分作独立校验）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [60, -80, 30], target: [0, 0, 0] },
+    camera: 'auto',
     build() {
       const m = new Model('ex11_dave_stability');
       const L = 40, B = 10, T = 3, KG = 3;
@@ -571,7 +571,7 @@ export const EXAMPLES = [
     id: 'ex12', cat: 'DAVE', name: 'DAVE 不稳定平衡铰接 unstable_equlibrium_hinge.py',
     desc: '移植 DAVE 官方 examples/unstable_equlibrium_hinge.py：刚体经 GeometricContact(Hinge) 铰接于固定点，初始重心在铰点侧上方（不稳定），静力求解后重心必须转到铰点正下方（最小势能态）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [8, -10, 6], target: [0, 0, 1] },
+    camera: 'auto',
     build() {
       const m = new Model('ex12_dave_hinge');
       const pin = [0, 0, 2];
@@ -602,7 +602,7 @@ export const EXAMPLES = [
     id: 'ex13', cat: 'DAVE', name: 'DAVE 销孔连接 pin_hole_connect.py',
     desc: '移植 DAVE 官方 examples/pin_hole_connect.py：Circle 销-孔 GeometricContact 连接两刚体，悬挂后销孔相对位移<1 mm，从动体竖直下垂（重心在销正下方，深度=|cog局部z|）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [6, -8, 5], target: [1, 0, 1] },
+    camera: 'auto',
     build() {
       const m = new Model('ex13_dave_pin_hole');
       const pin = [1, 0, 3];
@@ -630,7 +630,7 @@ export const EXAMPLES = [
     id: 'ex14', cat: 'DAVE', name: 'DAVE 吊索 shackles/sling：两腿张力解析校验',
     desc: '移植 DAVE 官方 examples/shackles.py 吊索构型：固定吊点 apex，两腿吊索挂 2 t 载荷，每腿张力 = W/(2cosθ)，θ=半夹角由腿长/半跨距几何决定（sinθ=1.5/6）。动力学释放后张力均值校验。',
     analysis: { kind: 'statics' },
-    camera: { pos: [12, -14, 10], target: [0, 0, 5] },
+    camera: 'auto',
     build() {
       const m = new Model('ex14_dave_sling');
       const apex = [0, 0, 10], half = 1.5, legLen = 6, mass = 2000;
@@ -658,7 +658,7 @@ export const EXAMPLES = [
     id: 'ex15', cat: 'DAVE', name: 'DAVE 风流算例 wind&current（WindArea+CurrentArea 反力）',
     desc: '移植 DAVE 官方 notebooks dave_jupyter_wind_and_current：船体固定，风 10 m/s@zRef（A=100 m², Cd=1.2），流 1.0 m/s（A=200 m², zc=-2, Cd=1.0），X 向支座反力 = ½ρ_air Cd A v² + ½ρ_w Cd A_c u² 解析对比。',
     analysis: { kind: 'statics' },
-    camera: { pos: [40, -60, 25], target: [0, 0, 0] },
+    camera: 'auto',
     build() {
       const m = new Model('ex15_dave_wind_current');
       const L = 30, B = 8, T = 4;
@@ -691,7 +691,7 @@ export const EXAMPLES = [
     id: 'ex16', cat: 'DAVE', name: 'DAVE 元件库校验 Spring/Beam/LC6d/Tank/ContactBall',
     desc: 'DAVE 节点单元级校验：Spring 平衡位移 x=L0−F/k；Beam 轴向 ΔL=(W+F)L/EA（EI 弯曲刚度已挂在线上）；LC6d 位移=F/K；Tank 附加重量 ρgV·fill；ContactBall 静止高度=半径 r。',
     analysis: { kind: 'statics' },
-    camera: { pos: [16, -20, 12], target: [4, 2, 1] },
+    camera: 'auto',
     build() {
       const m = new Model('ex16_dave_elements');
       const mkFrame = (name, pos) => new RigidBody6DOF({ name, type: 'Frame', mass: 1e6, cog: [0, 0, 0], inertia: [1e6, 1e6, 1e6], pos, hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
@@ -745,7 +745,7 @@ export const EXAMPLES = [
     id: 'ex17', cat: 'DAVE-nb', name: 'DAVE-notebooks validation/catenaries/catenary：100 节点悬链线 vs 解析',
     desc: '复现 DAVE-notebooks validation/catenaries/catenary.ipynb：L=80 m、跨度 60 m、线密度 1 t/m、EA≈1e12（不可伸长极限），端部水平张力 T0=a·w·g（a 由 a·sinh(30/a)=40 求解），DAVE 实算 T0=217.80 kN；校验 T0、垂 sag=a(cosh(30/a)−1) 与对称性。',
     analysis: { kind: 'statics' },
-    camera: { pos: [0, -130, 50], target: [0, 0, -12] },
+    camera: 'auto',
     build() {
       const m = new Model('ex17_nb_catenary');
       const line = new Line({ name: 'Catenary', nSeg: 100, length: 80, d: 0.4, massPerLen: 1000, EA: 1e10, buoyant: false, initShape: 'catenary',
@@ -775,7 +775,7 @@ export const EXAMPLES = [
     id: 'ex18', cat: 'DAVE-nb', name: 'DAVE-notebooks catenary hinges：50 节铰接链 + Connector2d 拉到 (30,0,0)',
     desc: '复现 validation/catenaries/catenary hinges.ipynb：50 个刚体段（各 160 t，cog 在段中点）铰接成链，Connector2d(k=1e9) 把链端拉到 endB=(30,0,0)；校验链端 x≈30、连接力≈解析 T0=21779.8 kN（DAVE 实算 21777.8 kN)、跨中 sag。',
     analysis: { kind: 'statics' },
-    camera: { pos: [0, -120, 60], target: [0, 0, -12] },
+    camera: 'auto',
     build() {
       const m = new Model('ex18_nb_catenary_hinges');
       const seg = 50, segL = 80 / seg, x = 30;
@@ -818,7 +818,7 @@ export const EXAMPLES = [
     id: 'ex19', cat: 'DAVE-nb', name: 'DAVE-notebooks hydrostatic barge：排水量/浮心/BM 校验（横倾 1°）',
     desc: '复现 validation/hydrostatics/hydrostatic rectangular barge.ipynb：箱型驳船 100×20×8、吃水 4 m → 排水量 8000 m³、浮心 z=−2 m、BM=I/V=8.333 m；绕浮心横倾 1° 后由浮心横移反算 BM，与解析对比（DAVE 实算 8.334 m)。',
     analysis: { kind: 'statics' },
-    camera: { pos: [160, -200, 80], target: [0, 0, -4] },
+    camera: 'auto',
     build() {
       const m = new Model('ex19_nb_barge_hydrostatics');
       const L = 100, B = 20, T = 8, draft = 4;
@@ -857,7 +857,7 @@ export const EXAMPLES = [
     id: 'ex20', cat: 'DAVE-nb', name: 'DAVE-notebooks GHS Nato pontoon：部分充注液舱的吃水与横倾',
     desc: '复现 validation/hydrostatics/GHS/Nato pontoon with partially filled tanks.ipynb：浮筒 13.59×4.1×0.74（取 obj 包围盒）、7.5 t、cog(6.82,0,0.38)，左右舱密度 0.985、充注 50%/10%；校验吃水=总质量/(ρLB) 与横倾角 tanφ=Δm·y/(m·GM)。',
     analysis: { kind: 'statics' },
-    camera: { pos: [25, -30, 15], target: [6.8, 0, 0] },
+    camera: 'auto',
     build() {
       const m = new Model('ex20_nb_pontoon_tanks');
       const L = 13.59, B = 4.1, T = 0.74;
@@ -898,7 +898,7 @@ export const EXAMPLES = [
     id: 'ex21', cat: 'DAVE-nb', name: 'DAVE-notebooks OrcaFlex 交叉验证 3plift：三点吊 10 t 体的平衡位姿',
     desc: '复现 validation/orcaflex/crossvalidate_ofx_3plift.ipynb：10 t 刚体（cog 1.7,3.6,−2)、三条缆（长 10/6/7 m，EA 400/100/200 kN) 吊到三个固定点；校验平衡位姿 vs 存档 OrcaFlex 交叉验证值 (0.1323,−0.6332,−0.4559) 与独立 3 张力最小二乘反算。',
     analysis: { kind: 'statics' },
-    camera: { pos: [30, -35, 18], target: [0, 0, 4] },
+    camera: 'auto',
     build() {
       const m = new Model('ex21_nb_3plift');
       const body = new RigidBody6DOF({ name: 'Body', type: 'RigidBody', mass: 10000, cog: [1.7, 3.6, -2.0],
@@ -957,7 +957,7 @@ export const EXAMPLES = [
     id: 'ex22', cat: 'DAVE-nb', name: 'DAVE-notebooks OrcaFlex 交叉验证 Snake15：15 节铰接链悬链 vs OrcaFlex 存档',
     desc: '由 DAVE 模型文件 examples/assets/Snake15.dave 导入构建（core/dave_import.js），复现 validation/orcaflex/crossvalidate_ofx_Snake15.ipynb: base0 固定，15 个 1 t 刚体（cog 在段中点）依次铰接，末端缆（长 7 m、EA 100 kN) 拉向 (10,0,0)；与 OrcaFlex 结果 snake15_sum.yml 对比：base1 转角 86.35°、base10 位姿 (5.330,−17.425) 转角 −22.14°、base15 (9.105,−8.959) −83.88°、缆张力 56.44 kN。',
     analysis: { kind: 'statics' },
-    camera: { pos: [25, -45, 25], target: [5, 0, -9] },
+    camera: 'auto',
     build() {
       // 由 DAVE 模型文件 examples/assets/Snake15.dave 导入构建（core/dave_import.js 解释执行 .dave）
       const m = loadDaveModel(SNAKE15_DAVE, { name: 'ex22_nb_snake15', resolveAsset: (n) => DAVE_ASSETS[n] ?? null });
@@ -1014,7 +1014,7 @@ export const EXAMPLES = [
     id: 'ex23', cat: 'DAVE-nb', name: 'DAVE-notebooks 100x30x8 barge：goal_seek 质量使吃水=4 m + LC6d 定位弹簧 + 压载',
     desc: '由 DAVE 模型文件 examples/assets/100x30x8_barge.dave 导入构建，复现 validation/orcaflex/crossvalidate_ofx_dynamics.ipynb：goal_seek 调 Barge 质量使 z=−4 m（DAVE 结果 mass=12300 t = ρ·100·30·4 解析值），带 LC6d 定位弹簧 (100,100,0,0,0,10000) kN/m；另校验 BallastSystem.solveForDraft 压载充注率。',
     analysis: { kind: 'statics' },
-    camera: { pos: [260, -320, 130], target: [50, 0, 0] },
+    camera: 'auto',
     build() {
       // 由 DAVE 模型文件 examples/assets/100x30x8_barge.dave 导入构建：
       // Barge 刚体 + BuoyancyBox(cube.obj*scale) + LC6d 定位弹簧 + 32 个压载罐，全部来自 .dave
@@ -1055,7 +1055,7 @@ export const EXAMPLES = [
     id: 'ex24', cat: 'DAVE-nb', name: 'DAVE-notebooks "Joints and DOF"：缆索悬挂刚体的转动平衡',
     desc: '复现 01 Getting started/Joints and degrees of freedom.ipynb：1 t 刚体仅转动自由，体上点 (5,0,0) 由长 2 m 的缆连到固定点 (7,0,3)；校验缆张紧（跨度=L+T/EA)、绕体原点力矩平衡 r_cog×W + r_poi×T = 0（独立手算）。',
     analysis: { kind: 'statics' },
-    camera: { pos: [14, -18, 10], target: [3, 0, 1] },
+    camera: 'auto',
     build() {
       const m = new Model('ex24_nb_joints_dof');
       const body = new RigidBody6DOF({ name: 'Body', type: 'RigidBody', mass: 1000, cog: [3, 0, 0], inertia: [100, 100, 100],
@@ -1095,7 +1095,7 @@ export const EXAMPLES = [
     id: 'ex25', cat: 'DAVE-nb', name: 'DAVE-notebooks hook block：力作用下吊钩绕 z 自由转动对准',
     desc: '复现 02 Examples/Making a block (hook) asset.ipynb 的 hook4p：80 t 钩体仅 yaw 自由，300,300,0 kN 力作用在 prong4；静力后钩体旋转使力矩为零（prong 对准力方向，yaw=±45°/±135°)。',
     analysis: { kind: 'statics' },
-    camera: { pos: [6, -8, 5], target: [0, 0, -1.3] },
+    camera: 'auto',
     build() {
       const m = new Model('ex25_nb_hook');
       const hook = new RigidBody6DOF({ name: 'hook4p', type: 'RigidBody', mass: 80000, cog: [0, 0, -1.3], inertia: [1e4, 1e4, 1e4],
@@ -1128,7 +1128,7 @@ export const EXAMPLES = [
     id: 'ex26', cat: 'DAVE-nb', name: 'DAVE-notebooks 力穿过旋转坐标系链：Scene DAG 世界变换校验',
     desc: '复现 70 Book/force_traveling_through_rotated_axis_systems.ipynb：10 个嵌套 axis（各旋转向量 (1,10,5)°、平移 (−1,3,1.3))，末端点作用力 F；校验 DAG 的 worldPosition == 独立手工 Rodrigues 矩阵合成，以及力对根的矩 r×F。',
     analysis: { kind: 'statics' },
-    camera: { pos: [30, -40, 20], target: [0, 0, 0] },
+    camera: 'auto',
     build() {
       const m = new Model('ex26_nb_rotated_axes');
       let a = m.scene.newAxis('axis_0', { position: [0, 0, 0], rotation: [0, 0, 0] });
@@ -1181,7 +1181,7 @@ export const EXAMPLES = [
     id: 'ex27', cat: 'DAVE-nb', name: 'DAVE-notebooks Vessel Stability 02 Lift：驳船吊重横倾',
     desc: '复现 10 Buoyancy and Stability/Vessel Stability - 02 Lift.ipynb：驳船 100×30×12、20000 t、cog(5,0,0)，吊臂悬点(局部 −35.4,−20.4,44) 挂 1000 t 重物（缆长 40.947 m、EA 100 kN→1e8 N)；校验缆张力=重物重量，驳船横倾角 vs 倾覆力矩/网格 GZ 回复力矩平衡求根。(注：BuoyancyBox 只建模 roll 横截面，pitch 固定；悬点取吊臂侧摆 30° 使吊重产生横倾力矩。OBJ 网格用包围盒近似。)',
     analysis: { kind: 'statics' },
-    camera: { pos: [180, -260, 90], target: [20, 0, 0] },
+    camera: 'auto',
     build() {
       const m = new Model('ex27_nb_stability_lift');
       const barge = new RigidBody6DOF({ name: 'Barge', type: 'Vessel', mass: 2e7, cog: [5, 0, 0],
@@ -1244,7 +1244,7 @@ export const EXAMPLES = [
     id: 'ex28', cat: '几何/网格', name: '网格几何建模：OBJ解析+图元+精确体积/形心/惯性；网格浮力任意姿态水线切割',
     desc: 'core/mesh.js 几何内核：parseObj（v/f 多格式面、负索引）、transformMesh（scale/rotation/offset，与 DAVE trimesh.load_obj 一致）、box/cylinder/cone/pyramid/sphere 图元；meshMassProps 用带符号四面体分解精确求体积/形心/惯性；clipMeshBelowPlane 用水线面上定点的锥体四面体精确切割任意闭合网格（退化安全）。校验：官方 cube.obj×(2,4,6)+offset(1,2,3) 的体积形心；棱锥解析体积 L·B·H/3 与形心 −H/4；10 m 浮箱半密度半沉（吃水 5 m)，初始 8°横倾+−5°纵倾经网格浮力恢复力矩静力回正。',
     analysis: { kind: 'statics' },
-    camera: { pos: [26, -32, 18], target: [0, 0, -3] },
+    camera: 'auto',
     build() {
       const m = new Model('ex28_mesh_geometry');
       // floating mesh box (half density -> half submerged), low CG for stability

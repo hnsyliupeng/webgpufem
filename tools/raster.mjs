@@ -160,7 +160,7 @@ export function renderPNG(scene, opts = {}) {
     const c0 = [96, 82, 58], c1 = [52, 44, 32];
     quad([ext.min[0], ext.min[1], z], [ext.max[0], ext.min[1], z], [ext.max[0], ext.max[1], z], [ext.min[0], ext.max[1], z], c0, 1);
     // fake vertical gradient: overlay darker band toward camera bottom
-    const bedCol = [110, 94, 66];
+    const bedCol = [64, 56, 42];
     const nx = 16, ny = 12;
     for (let i = 0; i <= nx; i++) {
       const x = ext.min[0] + (ext.max[0] - ext.min[0]) * i / nx;
@@ -176,7 +176,7 @@ export function renderPNG(scene, opts = {}) {
   // water surface: fine grid, per-quad wave normal, sun specular
   {
     const gn = scene.water?.gridN ?? 36;
-    const spanX = Math.max(200, (ext.max[0] - ext.min[0]) * 4), spanY = Math.max(200, (ext.max[1] - ext.min[1]) * 4);
+    const spanX = Math.max(140, (ext.max[0] - ext.min[0]) * 2.4), spanY = Math.max(140, (ext.max[1] - ext.min[1]) * 2.4);
     const cxm = (ext.min[0] + ext.max[0]) / 2, cym = (ext.min[1] + ext.max[1]) / 2;
     const wx0 = cxm - spanX / 2, wx1 = cxm + spanX / 2, wy0 = cym - spanY / 2, wy1 = cym + spanY / 2;
     const tNow = scene.water?.t ?? 0;
@@ -252,12 +252,11 @@ export function renderPNG(scene, opts = {}) {
       const base = b.type === 'Buoy' ? [220, 140, 40] : [70, 130, 200];
       for (const fc of faces) quad(corners[fc[0]], corners[fc[1]], corners[fc[2]], corners[fc[3]], base, 0.96, true);
     } else {
+      // buoy: 3D-shaded sphere (radius from displaced volume, min 1.5 m)
       const r = b.hydro === 'buoy' ? Math.sqrt((b.mass ? b.mass / 1025 : 2) / Math.PI) : 2;
       const rr = Math.max(r, 1.5);
-      disc(b.pos, rr, [150, 95, 30], 1);
-      disc(b.pos, rr * 0.75, [210, 140, 50], 1);
-      disc(b.pos, rr * 0.45, [240, 180, 80], 1);
-      disc([b.pos[0], b.pos[1], b.pos[2] - 1], rr * 0.6, [120, 75, 25], 0.9);
+      const pc = project(b.pos);
+      if (pc) prims.push({ depth: pc.z, p: pc, r: rr * pc.s, color: b.type === 'Buoy' ? [228, 145, 42] : [70, 130, 200], kind: 'sphere' });
     }
   }
 
@@ -275,6 +274,7 @@ export function renderPNG(scene, opts = {}) {
   for (const p of prims) {
     if (p.kind === 'line') drawLine(buf, W2, H2, p.pa, p.pb, p.color, p.width, p.alpha);
     else if (p.kind === 'disc') drawDisc(buf, W2, H2, p.p, p.r, p.color, p.alpha);
+    else if (p.kind === 'sphere') drawSphere(buf, W2, H2, p.p, p.r, p.color, right, up, fwd, L, Hv, fogF, FOGC);
     else if (p.kind === 'tri') drawTri(buf, W2, H2, p.pa, p.pb, p.pc, p.color, p.alpha);
     else if (p.kind === 'wquad') drawTri(buf, W2, H2, p.pa, p.pb, p.pc, p.color, p.alpha), drawTri(buf, W2, H2, p.pa, p.pc, p.pd, p.color, p.alpha);
   }
@@ -308,6 +308,34 @@ function setPx(buf, W, H, x, y, c, a) {
     buf[i + 2] = buf[i] * (1 - a) + c[2] * a;
   }
 }
+// per-pixel shaded sphere (buoys): lambert + specular on the view-facing hemisphere
+function drawSphere(buf, W, H, pc, R, base, right, up, fwd, L, Hv, fogF, FOGC) {
+  const x0 = Math.max(0, Math.floor(pc.x - R)), x1 = Math.min(W - 1, Math.ceil(pc.x + R));
+  const y0 = Math.max(0, Math.floor(pc.y - R)), y1 = Math.min(H - 1, Math.ceil(pc.y + R));
+  const R2 = R * R;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const dx = (x - pc.x) / R, dy = (pc.y - y) / R;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > 1) continue;
+    const nz = Math.sqrt(1 - d2);
+    const n = [right[0] * dx + up[0] * dy + fwd[0] * nz, right[1] * dx + up[1] * dy + fwd[1] * nz, right[2] * dx + up[2] * dy + fwd[2] * nz];
+    const diff = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+    const spec = Math.pow(Math.max(0, n[0] * Hv[0] + n[1] * Hv[1] + n[2] * Hv[2]), 40) * 110;
+    const k = fogF(pc.z);
+    let c = [
+      base[0] * (0.42 + 0.58 * diff) + spec,
+      base[1] * (0.42 + 0.58 * diff) + spec,
+      base[2] * (0.42 + 0.58 * diff) + spec,
+    ];
+    c = [c[0] * (1 - k) + FOGC[0] * k, c[1] * (1 - k) + FOGC[1] * k, c[2] * (1 - k) + FOGC[2] * k];
+    const i = (y * W + x) * 4;
+    buf[i] = Math.max(0, Math.min(255, Math.round(c[0])));
+    buf[i + 1] = Math.max(0, Math.min(255, Math.round(c[1])));
+    buf[i + 2] = Math.max(0, Math.min(255, Math.round(c[2])));
+    buf[i + 3] = 255;
+  }
+}
+
 function drawLine(buf, W, H, a, b, c, w, alpha) {
   const steps = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y), 1);
   const r = Math.max(0.6, w / 2);

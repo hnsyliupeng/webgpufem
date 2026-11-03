@@ -13,7 +13,7 @@ import * as sv from '../core/solvers.js';
 import { attachWorld, BuoyancyMesh } from '../core/elements.js';
 import { RigidBody6DOF } from '../core/vessel.js';
 import { boxMesh, cylinderMesh, sphereMesh, coneMesh, pyramidMesh, parseObj, transformMesh, meshMassProps, meshBBox } from '../core/mesh.js';
-import { describeScene, tensionColor } from '../core/render_scene.js';
+import { describeScene, autoCamera, tensionColor } from '../core/render_scene.js';
 import { waveNumber } from '../core/waves.js';
 import { VERIFICATION } from './verification_data.js';
 import { loadDaveModel } from '../core/dave_import.js';
@@ -281,7 +281,7 @@ function stopSim() { if (sim) sim.dead = true; sim = null; $('#btnStop').disable
 function startExample(ex, mode) {
   stopSim(); clearModelViz();
   const model = ex.build();
-  setCamera(ex.camera || { pos: [120, -160, 90], target: [0, 0, -30] });
+  setCamera(ex.camera === 'auto' ? autoCamera(describeScene(model, null, {})) : (ex.camera || { pos: [120, -160, 90], target: [0, 0, -30] }));
   buildWorld(model);
   const st = sv.computeStatics(model, { tol: 1e-7, maxIter: 80 });
   if (ex.perturb) ex.perturb(model);

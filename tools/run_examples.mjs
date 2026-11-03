@@ -3,7 +3,7 @@
 // usage: node tools/run_examples.mjs [--shots-only] [exId]
 import { EXAMPLES, getExample } from '../examples/index.js';
 import { computeStatics, runDynamics } from '../core/solvers.js';
-import { describeScene } from '../core/render_scene.js';
+import { describeScene, autoCamera } from '../core/render_scene.js';
 import { renderPNG, savePNG } from './raster.mjs';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
 
@@ -47,6 +47,7 @@ for (const ex of EXAMPLES) {
   let snap = null;
   if (run && run.snapshots.length) snap = run.snapshots[Math.floor(run.snapshots.length * 0.6)];
   const sceneDesc = describeScene(model, snap, { camera: ex.camera, waveGridN: ex.id === 'ex10' ? 28 : 18 });
+  if (ex.camera === 'auto') sceneDesc.camera = autoCamera(sceneDesc);
   if (model.env.waves) sceneDesc.waterGetEta = (x, y, t) => model.env.waves.eta(x, y, t);
   const allPass = checks.every(c => c.pass);
   const img = renderPNG(sceneDesc, { width: 1280, height: 800, label: `${ex.id.toUpperCase()} ${allPass ? 'PASS' : 'FAIL'} ${checks.filter(c => c.pass).length}/${checks.length}` });

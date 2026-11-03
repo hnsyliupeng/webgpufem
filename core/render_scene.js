@@ -11,6 +11,23 @@ function meshTrisWorld(mesh, pos, rot) {
   }));
 }
 
+// automatic framing: center on the scene content, distance from its extent
+export function autoCamera(scene) {
+  const pts = [];
+  for (const b of scene.bodies || []) { pts.push(b.pos); if (b.meshTris) for (const t of b.meshTris) for (const p of t) pts.push(p); }
+  for (const l of scene.lines || []) for (const p of l.pts) pts.push(p);
+  for (const p of scene.points || []) pts.push(p.pos);
+  if (!pts.length) return { pos: [120, -160, 90], target: [0, 0, -30] };
+  const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (const p of pts) for (let i = 0; i < 3; i++) { mn[i] = Math.min(mn[i], p[i]); mx[i] = Math.max(mx[i], p[i]); }
+  const c = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
+  const ext = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 8);
+  const dist = Math.max(ext * 1.12, 12);
+  const d = [0.72, -1.0, 0.52];
+  const n = Math.hypot(...d);
+  return { pos: [c[0] + d[0] / n * dist, c[1] + d[1] / n * dist, c[2] + d[2] / n * dist], target: c };
+}
+
 export function describeScene(model, snap, opts = {}) {
   const scene = {
     camera: opts.camera || { pos: [120, -160, 90], target: [0, 0, -30] },
