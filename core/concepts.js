@@ -57,12 +57,15 @@ export const NODE_TYPES = [
 ];
 
 // ---- forward kinematics: world transform of a frame with a parent ----
-// local: position [x,y,z] (m, parent-relative), rotation rotation-vector (deg, parent-relative)
-// parent: { pos:[..], rot:[..rad] } world pose of the parent (or null for global)
+// DAVE convention: BOTH local.rot and parent.rot are rotation vectors in DEGREES
+// (DAVE stores all angles, including rotation vectors, in degrees).
+// local:  { pos:[x,y,z] m (parent-relative), rot:[rx,ry,rz] deg (parent-relative) }
+// parent: { pos:[..] m, rot:[..] deg } world pose of the parent (or null for global)
 export function frameWorld(local, parent) {
-  const localR = rotVecToMat3((local.rot || [0, 0, 0]).map(d => d * Math.PI / 180));
+  const toRad = (r) => (r || [0, 0, 0]).map(d => d * Math.PI / 180);
+  const localR = rotVecToMat3(toRad(local.rot));
   if (!parent) return { pos: [...(local.pos || [0, 0, 0])], R: localR };
-  const pR = rotVecToMat3(parent.rot || [0, 0, 0]);
+  const pR = rotVecToMat3(toRad(parent.rot));
   const pos = mat3Vec(pR, local.pos || [0, 0, 0]).map((v, i) => v + parent.pos[i]);
   return { pos, R: mat3Mul(pR, localR) };
 }
@@ -71,13 +74,13 @@ export function frameWorld(local, parent) {
 // frames: [{ pos:[x,y,z], rot:[rx,ry,rz] deg }, ...] ordered root -> ... -> leaf.
 // Equivalent to walking the Scene DAG: T_world(node) = T_world(parent) * T_local(node).
 export function frameChainWorld(frames) {
-  let acc = null; // world pose of current frame: { pos, rot(rad rotvec) }
+  let acc = null; // world pose of current frame: { pos, rot(deg rotvec) }
   for (const f of frames) {
     const w = frameWorld({ pos: f.pos || [0, 0, 0], rot: f.rot || [0, 0, 0] }, acc);
-    acc = { pos: w.pos, rot: mat3ToRotVec(w.R) };
+    acc = { pos: w.pos, rot: mat3ToRotVec(w.R).map(v => v * 180 / Math.PI) };
   }
   if (!acc) return { pos: [0, 0, 0], R: rotVecToMat3([0, 0, 0]) };
-  return { pos: acc.pos, R: rotVecToMat3(acc.rot) };
+  return { pos: acc.pos, R: rotVecToMat3(acc.rot.map(d => d * Math.PI / 180)) }; // acc.rot 为 deg
 }
 
 // point expressed in frame-local coordinates -> world: p_w = frame.pos + frame.R * p_local

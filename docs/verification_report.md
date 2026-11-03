@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T05:24:09.853Z
+生成时间: 2026-11-03T05:47:36.330Z
 
 总体: **全部 PASS**
 
@@ -532,9 +532,10 @@ core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m
 | 深挖 FK·与 Scene DAG worldTransform 一致 (pos 误差) | 0.0000 | 0.0000 | m | 1.0000 | PASS |
 | 深挖 FK·与 Scene DAG worldTransform 一致 (R 误差) | 0.0000 | 2.220e-16 | - | 1.0000 | PASS |
 | 深挖 FK·点随 frame 变换 pointWorld: p_w = pos + R·p_local | 0.0000 | 0.0000 | m | 1.0000 | PASS |
-| 深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差) | 0.0000 | 7.772e-16 | m | 1.0000 | PASS |
+| 深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差) | 0.0000 | 6.661e-16 | m | 1.0000 | PASS |
 | 深挖 FK·逆变换往返 (rot 误差, deg) | 0.0000 | 3.553e-15 | deg | 1.0000 | PASS |
 | 深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差) | 0.0000 | 0.0000 | - | 1.0000 | PASS |
+| FK 角度约定: parent.rot=[0,0,90] 按 90° 解析 → R≈Rz(90°)（防 90 rad 误读） | 0.0000 | 6.123e-17 | - | 1.0000 | PASS |
 
 截图: ![ex32](screenshots/ex32.png)
 

@@ -1528,7 +1528,7 @@ export const EXAMPLES = [
       const A = new RigidBody6DOF({ name: 'A', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [10, 0, 5], rot: [0, 0, 30 * Math.PI / 180], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
       m.addBody(A);
       const B = new RigidBody6DOF({ name: 'B', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [0, 0, 0], rot: [0, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
-      B.pos = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: A.pos, rot: A.rot }).pos;
+      B.pos = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: A.pos, rot: A.rot.map(r => r * 180 / Math.PI) }).pos; // A.rot 为弧度, 转 deg
       B.mesh = boxMesh(1, 1, 1); m.addBody(B);
       const buoy = new RigidBody6DOF({ name: 'Buoy', type: 'Buoy', mass: 2000, cog: [0, 0, 0], inertia: [800, 800, 1200], pos: [25, 10, 0], rot: [0, 0, 0], hydro: { kind: 'buoy', V: 2000 / RHO, Awp: Math.PI * 1.5 ** 2, cob: [0, 0, -0.5] }, addedMass: [0, 0, 0, 0, 0, 0], fixed: [false, false, false, true, true, true] });
       m.addBody(buoy);
@@ -1543,10 +1543,10 @@ export const EXAMPLES = [
       const daveClasses = ['Axis', 'Point', 'Poi', 'Frame', 'RigidBody', 'Cable', 'Beam', 'LC6d', 'Connector2d', 'Force', 'HydSpring', 'Buoyancy', 'Visual', 'Tank', 'BallastSystem', 'ContactBall', 'ContactMesh', 'GeometricContact', 'Circle', 'Shackle', 'Sling', 'SPMT', 'WindOrCurrentArea', 'WaveInteraction', 'Measurement'];
       const missing = daveClasses.filter(c => !NODE_TYPES.some(n => n.dave.includes(c)));
       // FK: child frame at local (2,0,0) on parent A (pos (10,0,5), yaw 30°)
-      const fk = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: [10, 0, 5], rot: [0, 0, 30 * Math.PI / 180] });
+      const fk = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: [10, 0, 5], rot: [0, 0, 30] }); // local/parent rot 均为 deg
       const c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
       // rotation composition: parent yaw 30 + child yaw 30 -> world yaw 60
-      const comp = frameWorld({ pos: [0, 0, 0], rot: [0, 0, 30] }, { pos: [0, 0, 0], rot: [0, 0, 30 * Math.PI / 180] }); // parent.rot 为弧度
+      const comp = frameWorld({ pos: [0, 0, 0], rot: [0, 0, 30] }, { pos: [0, 0, 0], rot: [0, 0, 30] }); // 双方均为 deg → yaw 60°
       const compDeg = Math.hypot(comp.R[0], comp.R[3]) !== 0 ? Math.atan2(comp.R[3], comp.R[0]) * 180 / Math.PI : 0;
       // rotation vector <-> euler (DAVE tilt/heading definitions)
       const e1 = rotVecToEuler(eulerToRotVec(30, 0, 0));
@@ -1587,14 +1587,17 @@ export const EXAMPLES = [
       // inverse FK round-trip: worldToLocal(parentWorld, frameWorld(local, parentWorld)) == local
       const parentW = frameChainWorld(chain.slice(0, 2));
       const localPose = { pos: [2, 1, -1], rot: [5, -10, 30] };
-      const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R) });
+      const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R).map(v => v * 180 / Math.PI) }); // 世界 rot 转回 deg
       const back = worldToLocal({ pos: parentW.pos, R: parentW.R }, { pos: wPose.pos, R: wPose.R });
       const invPosErr = Math.max(...back.pos.map((v, i) => Math.abs(v - localPose.pos[i])));
       const backRotErr = Math.max(...back.rot.map((v, i) => Math.abs(v - localPose.rot[i])));
       // mixed-axis composition: parent rotvec(10,-20,30)deg * child rotvec(5,15,-25)deg
-      const mix = frameWorld({ pos: [0, 0, 0], rot: [5, 15, -25] }, { pos: [0, 0, 0], rot: [10, -20, 30].map(d => d * Math.PI / 180) });
+      const mix = frameWorld({ pos: [0, 0, 0], rot: [5, 15, -25] }, { pos: [0, 0, 0], rot: [10, -20, 30] }); // 均为 deg
       const mixManual = mat3Mul(rotVecToMat3([10, -20, 30].map(d => d * Math.PI / 180)), rotVecToMat3([5, 15, -25].map(d => d * Math.PI / 180)));
       const mixErr = Math.max(...mix.R.map((v, i) => Math.abs(v - mixManual[i])));
+      // semantic guard: DAVE 角度约定 — parent.rot=[0,0,90] 必须按 90° 解析（若误按 90 rad 则 R[0]=cos90rad≈-0.448)
+      const g = frameWorld({ pos: [0, 0, 0], rot: [0, 0, 0] }, { pos: [0, 0, 0], rot: [0, 0, 90] });
+      const rz90err = Math.max(Math.abs(g.R[0] - 0), Math.abs(g.R[1] - (-1)), Math.abs(g.R[3] - 1), Math.abs(g.R[4] - 0));
       return [
         { name: 'DAVE 单位制: 12300 mT = 1.23e7 kg; 10 kN = 1e4 N; 90° = π/2', expected: 1, actual: (u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12 },
         { name: '单位制往返无损 (SI->DAVE->SI)', expected: 1, actual: (u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 && Math.abs(u.angleFromSI(u.angleToSI(45)) - 45) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 },
@@ -1617,6 +1620,7 @@ export const EXAMPLES = [
         { name: '深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差)', expected: 0, actual: invPosErr, unit: 'm', tol: 1, absFloor: 1e-9 },
         { name: '深挖 FK·逆变换往返 (rot 误差, deg)', expected: 0, actual: backRotErr, unit: 'deg', tol: 1, absFloor: 1e-9 },
         { name: '深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差)', expected: 0, actual: mixErr, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: 'FK 角度约定: parent.rot=[0,0,90] 按 90° 解析 → R≈Rz(90°)（防 90 rad 误读）', expected: 0, actual: rz90err, unit: '-', tol: 1, absFloor: 1e-12 },
       ];
     },
   },
