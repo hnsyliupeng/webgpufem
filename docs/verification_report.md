@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T08:18:09.109Z
+生成时间: 2026-11-03T09:06:22.676Z
 
 总体: **全部 PASS**
 
@@ -534,9 +534,12 @@ core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m
 | 深挖 FK·与 Scene DAG worldTransform 一致 (R 误差) | 0.0000 | 0.0000 | - | 1.0000 | PASS |
 | 深挖 FK·点随 frame 变换 pointWorld: p_w = pos + R·p_local | 0.0000 | 0.0000 | m | 1.0000 | PASS |
 | 深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差) | 0.0000 | 4.441e-16 | m | 1.0000 | PASS |
-| 深挖 FK·逆变换往返 (rot 误差, deg) | 0.0000 | 5.329e-15 | deg | 1.0000 | PASS |
+| 深挖 FK·逆变换往返 (rot 矩阵误差) | 0.0000 | 2.220e-16 | - | 1.0000 | PASS |
 | 深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差) | 0.0000 | 0.0000 | - | 1.0000 | PASS |
 | FK 角度约定: parent.rot=[0,0,90] 按 90° 解析 → R≈Rz(90°)（防 90 rad 误读） | 0.0000 | 6.123e-17 | - | 1.0000 | PASS |
+| 随机属性测试: 20 条 4 级随机链 frameChainWorld == Scene DAG worldTransform (err) | 0.0000 | 0.0000 | - | 1.0000 | PASS |
+| 随机属性测试: == 独立 2D Rodrigues 手工合成 (err) | 0.0000 | 0.0000 | - | 1.0000 | PASS |
+| 随机属性测试: 逆变换往返 max err (20 链, 机器精度) | 0.0000 | 1.268e-13 | - | 1.0000 | PASS |
 
 截图: ![ex32](screenshots/ex32.png)
 

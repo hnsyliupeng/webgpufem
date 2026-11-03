@@ -1,7 +1,7 @@
 // examples/index.js — 10 verification cases (V01..V10 style) covering lines, mooring,
 // buoys, vessels, crane lift, riser, waves/spectrum/fatigue. Each has build() + verify().
 import { Model, Scene, Manager, dissolveNode } from '../core/scene.js';
-import { rotVecToMat3, mat3ToRotVec, mat3Mul, mat3Vec } from '../core/math.js';
+import { rotVecToMat3, mat3ToRotVec, mat3Mul, mat3Vec, rng32 } from '../core/math.js';
 import { Line } from '../core/line.js';
 import { RigidBody6DOF, boxGZ } from '../core/vessel.js';
 import { Seabed, CurrentField, WindField } from '../core/env.js';
@@ -1565,7 +1565,7 @@ export const EXAMPLES = [
       // manual step-by-step composition with math.js primitives (rot in rad)
       let mP = [0, 0, 0], mR = rotVecToMat3([0, 0, 0]);
       for (const f of chain) {
-        const Rl = rotVecToMat3(f.rot.map(d => d * Math.PI / 180));
+        const Rl = rotVecToMat3(f.rot.map(d => d * (Math.PI / 180)));
         mP = mat3Vec(mR, f.pos).map((v, i) => v + mP[i]);
         mR = mat3Mul(mR, Rl);
       }
@@ -1573,9 +1573,9 @@ export const EXAMPLES = [
       const chainRErr = Math.max(...leafW.R.map((v, i) => Math.abs(v - mR[i])));
       // cross-check against the Scene DAG worldTransform (SNode.rotation is radians)
       const sc = new Scene('fk_check');
-      const n0 = sc.newFrame('root', { position: chain[0].pos, rotation: chain[0].rot.map(d => d * Math.PI / 180) });
-      const n1 = sc.newFrame('mid', { position: chain[1].pos, rotation: chain[1].rot.map(d => d * Math.PI / 180) });
-      const n2 = sc.newFrame('leaf', { position: chain[2].pos, rotation: chain[2].rot.map(d => d * Math.PI / 180) });
+      const n0 = sc.newFrame('root', { position: chain[0].pos, rotation: chain[0].rot.map(d => d * (Math.PI / 180)) });
+      const n1 = sc.newFrame('mid', { position: chain[1].pos, rotation: chain[1].rot.map(d => d * (Math.PI / 180)) });
+      const n2 = sc.newFrame('leaf', { position: chain[2].pos, rotation: chain[2].rot.map(d => d * (Math.PI / 180)) });
       sc.setParent(n1, n0); sc.setParent(n2, n1);
       const dag = sc.worldTransform(n2);
       const dagPosErr = Math.max(...leafW.pos.map((v, i) => Math.abs(v - dag.pos[i])));
@@ -1587,17 +1587,65 @@ export const EXAMPLES = [
       // inverse FK round-trip: worldToLocal(parentWorld, frameWorld(local, parentWorld)) == local
       const parentW = frameChainWorld(chain.slice(0, 2));
       const localPose = { pos: [2, 1, -1], rot: [5, -10, 30] };
-      const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R).map(v => v * 180 / Math.PI) }); // 世界 rot 转回 deg
+      const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R).map(v => v * (180 / Math.PI)) }); // 世界 rot 转回 deg
       const back = worldToLocal({ pos: parentW.pos, R: parentW.R }, { pos: wPose.pos, R: wPose.R });
       const invPosErr = Math.max(...back.pos.map((v, i) => Math.abs(v - localPose.pos[i])));
-      const backRotErr = Math.max(...back.rot.map((v, i) => Math.abs(v - localPose.rot[i])));
+      const backRotErr = Math.max(...rotVecToMat3(back.rot.map(v => v * (Math.PI / 180))).map((v, i) => Math.abs(v - rotVecToMat3(localPose.rot.map(v => v * (Math.PI / 180)))[i]))); // 比旋转矩阵（rotvec 180° 轴向翻转等价）
       // mixed-axis composition: parent rotvec(10,-20,30)deg * child rotvec(5,15,-25)deg
       const mix = frameWorld({ pos: [0, 0, 0], rot: [5, 15, -25] }, { pos: [0, 0, 0], rot: [10, -20, 30] }); // 均为 deg
-      const mixManual = mat3Mul(rotVecToMat3([10, -20, 30].map(d => d * Math.PI / 180)), rotVecToMat3([5, 15, -25].map(d => d * Math.PI / 180)));
+      const mixManual = mat3Mul(rotVecToMat3([10, -20, 30].map(d => d * (Math.PI / 180))), rotVecToMat3([5, 15, -25].map(d => d * (Math.PI / 180))));
       const mixErr = Math.max(...mix.R.map((v, i) => Math.abs(v - mixManual[i])));
       // semantic guard: DAVE 角度约定 — parent.rot=[0,0,90] 必须按 90° 解析（若误按 90 rad 则 R[0]=cos90rad≈-0.448)
       const g = frameWorld({ pos: [0, 0, 0], rot: [0, 0, 0] }, { pos: [0, 0, 0], rot: [0, 0, 90] });
       const rz90err = Math.max(Math.abs(g.R[0] - 0), Math.abs(g.R[1] - (-1)), Math.abs(g.R[3] - 1), Math.abs(g.R[4] - 0));
+      // ---- randomized property test: 20 random 4-level chains, fixed seed ----
+      const rnd = rng32(42);
+      const rr = (a, b) => a + (b - a) * rnd();
+      // independent Rodrigues implementation (ex26 style, 2D arrays)
+      const rot2 = (r) => {
+        const th = Math.hypot(r[0], r[1], r[2]);
+        if (th < 1e-12) return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+        const x = r[0] / th, y = r[1] / th, z = r[2] / th, c = Math.cos(th), sn = Math.sin(th), C = 1 - c;
+        return [[c + x * x * C, x * y * C - z * sn, x * z * C + y * sn],
+                [y * x * C + z * sn, c + y * y * C, y * z * C - x * sn],
+                [z * x * C - y * sn, z * y * C + x * sn, c + z * z * C]];
+      };
+      const mul2 = (A, B) => A.map((row, i) => B[0].map((_, j) => row[0] * B[0][j] + row[1] * B[1][j] + row[2] * B[2][j]));
+      const apply2 = (A, v) => A.map(row => row[0] * v[0] + row[1] * v[1] + row[2] * v[2]);
+      let maxChainErr = 0, maxDagErr = 0, maxIndepErr = 0, maxInvErr = 0;
+      for (let t = 0; t < 20; t++) {
+        const chain = Array.from({ length: 4 }, () => ({ pos: [rr(-5, 5), rr(-5, 5), rr(-5, 5)], rot: [rr(-180, 180), rr(-89, 89), rr(-180, 180)] }));
+        const w = frameChainWorld(chain);
+        // vs Scene DAG worldTransform (SNode.rotation in rad)
+        const sc2 = new Scene('rnd' + t);
+        let prev = null;
+        const nodes = chain.map((f, i) => {
+          const n = sc2.newFrame('f' + i, { position: f.pos, rotation: f.rot.map(d => d * (Math.PI / 180)) });
+          if (prev) sc2.setParent(n, prev);
+          prev = n; return n;
+        });
+        const dag2 = sc2.worldTransform(nodes[3]);
+        maxDagErr = Math.max(maxDagErr, ...w.pos.map((v, i) => Math.abs(v - dag2.pos[i])), ...w.R.map((v, i) => Math.abs(v - dag2.R[i])));
+        // vs independent 2D Rodrigues composition
+        let p2 = [0, 0, 0], R2 = rot2([0, 0, 0]);
+        for (const f of chain) {
+          const Rl = rot2(f.rot.map(d => d * (Math.PI / 180)));
+          p2 = apply2(R2, f.pos).map((v, i) => v + p2[i]);
+          R2 = mul2(R2, Rl);
+        }
+        const R2flat = R2.flat();
+        maxIndepErr = Math.max(maxIndepErr, ...w.pos.map((v, i) => Math.abs(v - p2[i])), ...w.R.map((v, i) => Math.abs(v - R2flat[i])));
+        // inverse round-trip on the leaf
+        const parentW = frameChainWorld(chain.slice(0, 3));
+        const localPose = { pos: chain[3].pos, rot: chain[3].rot };
+        const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R).map(v => v * (180 / Math.PI)) });
+        const back = worldToLocal({ pos: parentW.pos, R: parentW.R }, { pos: wPose.pos, R: wPose.R });
+        // rotvec 在角度>180°时轴向翻转等价，故比较旋转矩阵而非分量
+        const Rback = rotVecToMat3(back.rot.map(v => v * (Math.PI / 180)));
+        const Rloc = rotVecToMat3(localPose.rot.map(v => v * (Math.PI / 180)));
+        maxInvErr = Math.max(maxInvErr, ...back.pos.map((v, i) => Math.abs(v - localPose.pos[i])), ...Rback.map((v, i) => Math.abs(v - Rloc[i])));
+        maxChainErr = Math.max(maxChainErr, 0); // chain itself is the reference
+      }
       return [
         { name: 'DAVE 单位制: 12300 mT = 1.23e7 kg; 10 kN = 1e4 N; 90° = π/2', expected: 1, actual: (u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12 },
         { name: '单位制往返无损 (SI->DAVE->SI)', expected: 1, actual: (u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 && Math.abs(u.angleFromSI(u.angleToSI(45)) - 45) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massFromSI(u.massToSI(777)) === 777 && u.forceFromSI(u.forceToSI(3.5)) === 3.5 },
@@ -1618,9 +1666,12 @@ export const EXAMPLES = [
         { name: '深挖 FK·与 Scene DAG worldTransform 一致 (R 误差)', expected: 0, actual: dagRErr, unit: '-', tol: 1, absFloor: 1e-12 },
         { name: '深挖 FK·点随 frame 变换 pointWorld: p_w = pos + R·p_local', expected: 0, actual: pwErr, unit: 'm', tol: 1, absFloor: 1e-12 },
         { name: '深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差)', expected: 0, actual: invPosErr, unit: 'm', tol: 1, absFloor: 1e-9 },
-        { name: '深挖 FK·逆变换往返 (rot 误差, deg)', expected: 0, actual: backRotErr, unit: 'deg', tol: 1, absFloor: 1e-9 },
+        { name: '深挖 FK·逆变换往返 (rot 矩阵误差)', expected: 0, actual: backRotErr, unit: '-', tol: 1, absFloor: 1e-9 },
         { name: '深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差)', expected: 0, actual: mixErr, unit: '-', tol: 1, absFloor: 1e-12 },
         { name: 'FK 角度约定: parent.rot=[0,0,90] 按 90° 解析 → R≈Rz(90°)（防 90 rad 误读）', expected: 0, actual: rz90err, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: '随机属性测试: 20 条 4 级随机链 frameChainWorld == Scene DAG worldTransform (err)', expected: 0, actual: maxDagErr, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: '随机属性测试: == 独立 2D Rodrigues 手工合成 (err)', expected: 0, actual: maxIndepErr, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: '随机属性测试: 逆变换往返 max err (20 链, 机器精度)', expected: 0, actual: maxInvErr, unit: '-', tol: 1, absFloor: 1e-9 },
       ];
     },
   },
