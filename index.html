@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebGPUFEM — OrcaFlex/DAVE 风格海洋分析 (本地独立运行)</title>
+<link rel="stylesheet" href="./app/style.css?v=1.4.0">
+<meta http-equiv="Cache-Control" content="no-store">
+<meta http-equiv="Pragma" content="no-cache">
+<script>
+// 启动遮罩：JS 正常启动后由 app.js 移除；若脚本出错则把错误直接显示在页面上（避免白板）
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('bootmsg');
+  if (d) { d.style.color = '#f87171'; d.style.whiteSpace = 'pre-wrap'; d.style.padding = '20px';
+    d.textContent = '脚本错误: ' + (e.message || e.type) + '\n@ ' + (e.filename || '') + ':' + (e.lineno || 0) + ':' + (e.colno || 0) + '\n请硬刷新 (Ctrl+F5) 或查看控制台'; }
+});
+window.addEventListener('unhandledrejection', function (e) {
+  var d = document.getElementById('bootmsg');
+  if (d) { d.style.color = '#f87171'; d.textContent = 'Promise 异常: ' + (e.reason && e.reason.message || e.reason); }
+});
+</script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/" } }
+</script>
+</head>
+<body>
+<div id="bootmsg" style="position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;background:#0b1220;color:#8ea0c2;font-size:15px">正在加载 WebGPUFEM …</div>
+<header>
+  <div>
+    <h1>🌊 WebGPUFEM</h1>
+    <span class="sub">OrcaFlex / DAVE 风格海洋柔性结构分析 · 纯浏览器清洁室实现 · 完全本地离线运行</span>
+  </div>
+  <div class="badge">清洁室实现：未对 DAVEcore 等二进制反编译</div>
+</header>
+<main>
+  <aside id="left">
+    <h2>算例</h2>
+    <div id="exlist"></div>
+    <div class="runbox">
+      <button id="btnStatics">求静力</button>
+      <button id="btnDyn">时域动力</button>
+      <button id="btnStop" disabled>停止</button>
+      <button id="btnVerify" title="在浏览器内完整重跑本算例的全部校核项">🧪 重跑校核</button>
+      <div id="prog"></div>
+    </div>
+    <div class="runbox">
+      <button id="btnJson" title="DAVE 风格 JSON 场景">⬇ JSON</button>
+      <button id="btnYaml" title="OrcaFlex 风格 YAML">⬇ YAML</button>
+      <button id="btnPy" title="DAVE 风格 Python 建模脚本">⬇ .py</button>
+      <button id="btnShot" title="保存当前 3D 画面为 PNG">🖼 画面</button>
+      <button id="btnImport" title="导入模型文件：DAVE .dave 建模脚本（经 core/dave_import.js 解析进 Scene DAG）、.obj 网格、或本系统导出的 .json">⬆ 导入</button>
+      <input type="file" id="fileImport" accept=".dave,.json,.py,.obj" style="display:none">
+      <select id="geoKind" title="新建几何体（网格 + 网格浮力 BuoyancyMesh)">
+        <option value="box">箱体 10×6×4</option><option value="cylinder">圆柱 r2 h6</option>
+        <option value="sphere">球 r3</option><option value="cone">圆锥 r2 h6</option><option value="pyramid">棱锥 8×8×6</option>
+      </select>
+      <button id="btnAddGeo" title="在当前场景新建一个几何体（procedural 网格，配精确网格浮力，半密度漂浮）">➕ 几何</button>
+    </div>
+    <div id="liveresult"></div>
+    <h2>场景树</h2>
+    <div id="tree" class="tree"></div>
+    <h2>检查器</h2>
+    <div id="inspector" class="insp dim">点击左侧场景树，或直接点击 3D 视图中的对象</div>
+    <h2>环境调节 <span style="font-size:10px;color:#8ea0c2">(滑动实时生效，重算静力请点“求静力”)</span></h2>
+    <div id="envctl"></div>
+    <h2>绞车 L0</h2>
+    <div id="winchctl"></div>
+    <div id="exdesc"></div>
+  </aside>
+  <section id="center">
+    <canvas id="view"></canvas>
+    <div id="timeline">
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1">
+      <span id="tlabel">t = 0.00 s</span>
+      <button id="btnPlay">▶ 播放</button>
+      <select id="speed" title="播放速度">
+        <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+      </select>
+    </div>
+    <canvas id="chart"></canvas>
+  </section>
+  <aside id="right">
+    <nav id="tabs">
+      <button data-tab="verify" class="on">✔🖼 验证截图</button>
+      <button data-tab="docs">📖 文档</button>
+      <button data-tab="flow">🔀 流程图</button>
+      <button data-tab="dl">⬇ 下载</button>
+    </nav>
+    <div id="tab-verify" class="tab on"></div>
+    <div id="tab-docs" class="tab"></div>
+    <div id="tab-flow" class="tab"></div>
+    <div id="tab-dl" class="tab"></div>
+  </aside>
+</main>
+<footer>
+  <span>10 个验证算例全部 PASS（右侧“✔🖼 验证截图”内嵌截图）· 截图见 screenshots/ · Word 文档见 docs/ · 运行: <code>npm run verify</code> / <code>npm run serve</code> · 3D 视图可点击拾取对象</span>
+</footer>
+<script>window.__APP_VERSION="1.4.0";</script>
+<script type="module" src="./app/app.js?v=1.4.0"></script>
+</body>
+</html>
