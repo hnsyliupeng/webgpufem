@@ -650,6 +650,8 @@ $('#btnVerify').onclick = () => {
 
 // ---------------- example list ----------------
 const vmap = Object.fromEntries(VERIFICATION.results.map(r => [r.id, r]));
+const footEl = document.getElementById('foot-count');
+if (footEl) footEl.textContent = `${VERIFICATION.results.length} 个验证算例${VERIFICATION.allPass ? '全部 PASS' : '存在 FAIL'}（右侧“✔🖼 验证截图”内嵌全部截图，含 ex32 FK 链 / ex33 节点树）· 截图见 screenshots/ · Word 文档见 docs/ · 运行: npm run verify / npm run serve · 3D 视图可点击拾取对象`;
 function buildExList() {
   const el = $('#exlist'); el.innerHTML = '';
   for (const ex of EXAMPLES) {
@@ -714,13 +716,12 @@ function buildFlow() {
 // ---------------- downloads tab ----------------
 const DL = [
   ['入口与 App', ['index.html', 'app/app.js', 'app/style.css', 'app/verification_data.js']],
-  ['核心库 core/', ['core/math.js', 'core/waves.js', 'core/env.js', 'core/catenary.js', 'core/line.js', 'core/vessel.js', 'core/scene.js', 'core/solvers.js', 'core/post.js', 'core/render_scene.js', 'core/flowcharts.js']],
+  ['核心库 core/', ['core/math.js', 'core/waves.js', 'core/env.js', 'core/catenary.js', 'core/line.js', 'core/vessel.js', 'core/scene.js', 'core/solvers.js', 'core/post.js', 'core/render_scene.js', 'core/flowcharts.js', 'core/mesh.js', 'core/marine.js', 'core/elements.js', 'core/dave_import.js', 'core/davecore.js', 'core/concepts.js', 'core/report.js']],
   ['算例 examples/', ['examples/index.js']],
-  ['核心 core/', ['core/mesh.js', 'core/dave_import.js', 'core/elements.js', 'core/scene.js', 'core/solvers.js', 'core/vessel.js', 'core/line.js', 'core/render_scene.js']],
   ['工具 tools/', ['tools/serve.mjs', 'tools/run_examples.mjs', 'tools/raster.mjs', 'tools/smoke.mjs', 'tools/export_docs.mjs', 'tools/build_docs.py', 'tools/build_pdf.py', 'tools/make_overview.mjs', 'tools/wheels/python_docx-1.2.0-py3-none-any.whl']],
   ['DAVE 资产 assets/', ['examples/assets/Snake15.dave', 'examples/assets/100x30x8_barge.dave', 'examples/assets/cube.obj', 'examples/assets/barge.obj', 'examples/assets/README.md', 'examples/assets/DAVE-LICENSE-MPL2.txt']],
   ['文档 docs/', ['docs/doc_data.js', 'docs/verification_report.md', 'docs/verification_report.html', 'docs/OrcaFlex_DAVE_实现文档.docx', 'docs/OrcaFlex_DAVE_实现文档.pdf', 'docs/flowcharts.json', 'docs/doc_data.json']],
-  ['截图 screenshots/', [...Array.from({ length: 10 }, (_, i) => `screenshots/ex${String(i + 1).padStart(2, '0')}.png`), 'screenshots/verification_overview.png']],
+  ['截图 screenshots/', [...VERIFICATION.results.map(r => `screenshots/${r.id}.png`), 'screenshots/verification_overview.png']],
   ['其他', ['README.md', 'package.json', '.gitignore', 'vendor/three.module.js', 'vendor/three.core.js', 'vendor/OrbitControls.js', 'vendor/Line2.js', 'vendor/LineGeometry.js', 'vendor/LineMaterial.js', 'vendor/LineSegments2.js', 'vendor/LineSegmentsGeometry.js', 'vendor/BufferGeometryUtils.js']],
 ];
 function buildDl() {
