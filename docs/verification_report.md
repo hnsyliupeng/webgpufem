@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T09:06:22.676Z
+生成时间: 2026-11-03T09:23:27.611Z
 
 总体: **全部 PASS**
 
@@ -37,7 +37,7 @@
 | ex29 | DAVE-notebooks 04 Reporting：Cheetah 节点属性报告（print_node_tree + solve_statics + report 通配符） | 8.2e-9 | - | ✅ PASS |
 | ex30 | DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5) | 0.0e+0 | - | ✅ PASS |
 | ex31 | DAVEcore 核心功能复现对照：求解器/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步 + pymeshup 式水线切片 | 1.5e+2 | - | ✅ PASS |
-| ex32 | DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii | 0.0e+0 | - | ✅ PASS |
+| ex32 | DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学（可视化 3 级 FK 链）、rotation vector/tilt/heading、inertia_radii | 0.0e+0 | - | ✅ PASS |
 | ex33 | DAVE 节点树架构：observers 通知与级联删除、Manager 依赖排序、dissolve 保持世界位姿 | 0.0e+0 | - | ✅ PASS |
 
 ## 详细校核项
@@ -509,9 +509,9 @@ core/davecore.js 按 DAVEcore（Scene._vfc 的 C++ 后端）公开文档的功�
 
 截图: ![ex31](screenshots/ex31.png)
 
-### ex32 DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii
+### ex32 DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学（可视化 3 级 FK 链）、rotation vector/tilt/heading、inertia_radii
 
-core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m⁻¹/deg 与 SI 互转）、完整 DAVE 节点类型注册表 NODE_TYPES（20+ 类，映射到本仓库实现并标状态）、frame 相对父节点的正向运动学 frameWorld、rotation vector（deg)↔ tilt_x/tilt_y/heading（heading=atan2(u_x.y,u_x.x), tilt_x=asin(u_y.z), tilt_y=−asin(u_x.z))、inertia_radii→I=r²·m。
+core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m⁻¹/deg 与 SI 互转）、完整 DAVE 节点类型注册表 NODE_TYPES（25 类）、frame 相对父节点的正向运动学（frameWorld 单级 + frameChainWorld 多级链 + pointWorld + worldToLocal 逆变换，全部 rot 为 degrees)、rotation vector（deg)↔ tilt_x/tilt_y/heading、inertia_radii→I=r²·m。演示场景为可视化的 3 级 FK 链 root→mid→leaf：每级一个随动旋转箱体（世界位姿=FK 结果）、红色 POI 标出各 frame 原点，leaf 上的偏移 POI_tip 展示 pointWorld 局部点→世界变换。
 
 | 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
 |---|---|---|---|---|---|
@@ -520,7 +520,7 @@ core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m
 | NODE_TYPES 覆盖全部 25 个 DAVE 节点类 | 0.0000 | 0.0000 | - | 0.0000 | PASS |
 | FK: 子 frame 局部(2,0,0) 在父(10,0,5,yaw30°) → 世界 x = 10+2cos30 | 11.7321 | 11.7321 | m | 1.000e-12 | PASS |
 | FK: 世界 y = 2sin30 = 1, z = 5 | 1.0000 | 1.0000 | m | 0.0000 | PASS |
-| B 帧世界坐标与 frameWorld 一致 | 11.7321 | 11.7321 | m | 1.000e-9 | PASS |
+| 可视化链: 箱体 fk1 世界坐标 == frameChainWorld(前两级) (B 帧 FK 一致) | 10.9641 | 10.9641 | m | 1.000e-9 | PASS |
 | 旋转合成: 父 yaw30° + 子 yaw30° → 世界 yaw 60° | 60.0000 | 60.0000 | deg | 1.000e-9 | PASS |
 | heading: rotvec(30,0,0) → heading=30°, tilt=0 | 30.0000 | 30.0000 | deg | 1.000e-9 | PASS |
 | tilt_y: rotvec(0,0,25) → tilt_y=25° (绕 y 正转 → 正 tilt_y) | 25.0000 | 25.0000 | deg | 1.000e-9 | PASS |
@@ -533,6 +533,7 @@ core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m
 | 深挖 FK·与 Scene DAG worldTransform 一致 (pos 误差) | 0.0000 | 0.0000 | m | 1.0000 | PASS |
 | 深挖 FK·与 Scene DAG worldTransform 一致 (R 误差) | 0.0000 | 0.0000 | - | 1.0000 | PASS |
 | 深挖 FK·点随 frame 变换 pointWorld: p_w = pos + R·p_local | 0.0000 | 0.0000 | m | 1.0000 | PASS |
+| 深挖 FK·渲染的 poi_tip 世界坐标 == pointWorld(leaf, 局部点) (截图可见） | 0.0000 | 0.0000 | m | 1.0000 | PASS |
 | 深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差) | 0.0000 | 4.441e-16 | m | 1.0000 | PASS |
 | 深挖 FK·逆变换往返 (rot 矩阵误差) | 0.0000 | 2.220e-16 | - | 1.0000 | PASS |
 | 深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差) | 0.0000 | 0.0000 | - | 1.0000 | PASS |

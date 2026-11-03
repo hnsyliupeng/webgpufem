@@ -1518,31 +1518,46 @@ export const EXAMPLES = [
   },
   {
     // DAVE "Core Concepts & Terminology": units, node registry, frames/FK, rotation vector, inertia_radii
-    id: 'ex32', cat: 'DAVEcore', name: 'DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii',
-    desc: 'core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m⁻¹/deg 与 SI 互转）、完整 DAVE 节点类型注册表 NODE_TYPES（20+ 类，映射到本仓库实现并标状态）、frame 相对父节点的正向运动学 frameWorld、rotation vector（deg)↔ tilt_x/tilt_y/heading（heading=atan2(u_x.y,u_x.x), tilt_x=asin(u_y.z), tilt_y=−asin(u_x.z))、inertia_radii→I=r²·m。',
+    id: 'ex32', cat: 'DAVEcore', name: 'DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学（可视化 3 级 FK 链）、rotation vector/tilt/heading、inertia_radii',
+    desc: 'core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m⁻¹/deg 与 SI 互转）、完整 DAVE 节点类型注册表 NODE_TYPES（25 类）、frame 相对父节点的正向运动学（frameWorld 单级 + frameChainWorld 多级链 + pointWorld + worldToLocal 逆变换，全部 rot 为 degrees)、rotation vector（deg)↔ tilt_x/tilt_y/heading、inertia_radii→I=r²·m。演示场景为可视化的 3 级 FK 链 root→mid→leaf：每级一个随动旋转箱体（世界位姿=FK 结果）、红色 POI 标出各 frame 原点，leaf 上的偏移 POI_tip 展示 pointWorld 局部点→世界变换。',
     analysis: { kind: 'statics' },
     camera: 'auto',
     build() {
-      // 小演示场景：父 frame 旋转 30°，子 frame 挂在局部 (2,0,0)，再挂一个浮筒
       const m = new Model('ex32_concepts');
-      const A = new RigidBody6DOF({ name: 'A', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [10, 0, 5], rot: [0, 0, 30 * Math.PI / 180], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
-      m.addBody(A);
-      const B = new RigidBody6DOF({ name: 'B', type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [0, 0, 0], rot: [0, 0, 0], hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
-      B.pos = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: A.pos, rot: A.rot.map(r => r * 180 / Math.PI) }).pos; // A.rot 为弧度, 转 deg
-      B.mesh = boxMesh(1, 1, 1); m.addBody(B);
-      const buoy = new RigidBody6DOF({ name: 'Buoy', type: 'Buoy', mass: 2000, cog: [0, 0, 0], inertia: [800, 800, 1200], pos: [25, 10, 0], rot: [0, 0, 0], hydro: { kind: 'buoy', V: 2000 / RHO, Awp: Math.PI * 1.5 ** 2, cob: [0, 0, -0.5] }, addedMass: [0, 0, 0, 0, 0, 0], fixed: [false, false, false, true, true, true] });
+      const sc = m.scene;
+      // 可视化 3 级 FK 链（deg) root→mid→leaf，非平凡旋转
+      const chainDeg = [
+        { pos: [8, 0, 6], rot: [0, 0, 30] },
+        { pos: [4, 1, 0], rot: [0, 20, 0] },
+        { pos: [3, -1, 1.5], rot: [0, 0, -15] },
+      ];
+      const frames = chainDeg.map((f, i) => sc.newFrame('chain' + i, { position: f.pos, rotation: f.rot.map(d => d * (Math.PI / 180)) }));
+      sc.setParent(frames[1], frames[0]); sc.setParent(frames[2], frames[1]);
+      // 每个 frame 原点挂一个 POI（渲染红点）；leaf 局部偏移点展示 pointWorld
+      for (let i = 0; i < 3; i++) { const p = sc.newPoi('poi' + i, { position: [0, 0, 0] }); sc.setParent(p, frames[i]); }
+      const poiTip = sc.newPoi('poi_tip', { position: [2, 0.5, 0.5] }); sc.setParent(poiTip, frames[2]);
+      // 每级一个随动箱体：世界位姿 = FK 结果（pos + rot 矩阵→rotvec)，直观看到平移+旋转合成
+      const poses = [frameWorld(chainDeg[0], null), frameChainWorld(chainDeg.slice(0, 2)), frameChainWorld(chainDeg)];
+      poses.forEach((pose, i) => {
+        const b = new RigidBody6DOF({ name: 'fk' + i, type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6], pos: [...pose.pos], rot: mat3ToRotVec(pose.R), hydro: null, addedMass: [0, 0, 0, 0, 0, 0], fixed: [true, true, true, true, true, true] });
+        b.mesh = boxMesh(0.8, 0.8, 0.8);
+        m.addBody(b);
+      });
+      // 浮筒（静力收敛演示）
+      const buoy = new RigidBody6DOF({ name: 'Buoy', type: 'Buoy', mass: 2000, cog: [0, 0, 0], inertia: [800, 800, 1200], pos: [30, 14, 0], rot: [0, 0, 0], hydro: { kind: 'buoy', V: 2000 / RHO, Awp: Math.PI * 1.5 ** 2, cob: [0, 0, -0.5] }, addedMass: [0, 0, 0, 0, 0, 0], fixed: [false, false, false, true, true, true] });
       m.addBody(buoy);
-      m.meta.A = A; m.meta.B = B;
+      m.meta = { sc, frames, poiTip, chainDeg, bodies: m.bodies };
       return m;
     },
     verify(model, ctx) {
-      const { A, B } = model.meta;
+      const { sc, frames, poiTip, chainDeg } = model.meta;
+      const A = model.bodies[0], B = model.bodies[1];
       // units round-trip (DAVE mT/kN/deg <-> SI)
       const u = DAVE_UNITS;
       // node registry covers the DAVE class list (node_prop_info.csv)
       const daveClasses = ['Axis', 'Point', 'Poi', 'Frame', 'RigidBody', 'Cable', 'Beam', 'LC6d', 'Connector2d', 'Force', 'HydSpring', 'Buoyancy', 'Visual', 'Tank', 'BallastSystem', 'ContactBall', 'ContactMesh', 'GeometricContact', 'Circle', 'Shackle', 'Sling', 'SPMT', 'WindOrCurrentArea', 'WaveInteraction', 'Measurement'];
       const missing = daveClasses.filter(c => !NODE_TYPES.some(n => n.dave.includes(c)));
-      // FK: child frame at local (2,0,0) on parent A (pos (10,0,5), yaw 30°)
+      // FK: child frame at local (2,0,0) on parent (10,0,5), yaw 30°
       const fk = frameWorld({ pos: [2, 0, 0], rot: [0, 0, 0] }, { pos: [10, 0, 5], rot: [0, 0, 30] }); // local/parent rot 均为 deg
       const c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
       // rotation composition: parent yaw 30 + child yaw 30 -> world yaw 60
@@ -1555,12 +1570,8 @@ export const EXAMPLES = [
       const e4 = rotVecToEuler([10, -8, 35]); // arbitrary rotvec -> euler (single-axis consistency)
       // inertia_radii
       const I = inertiaFromRadii(1000, [2, 3, 4]);
-      // ---- deeper FK: 3-level chain (all deg) ----
-      const chain = [
-        { pos: [10, 0, 5], rot: [0, 0, 30] },
-        { pos: [2, 0, 0], rot: [0, 20, 0] },
-        { pos: [1, 0, 0], rot: [0, 0, -15] },
-      ];
+      // ---- deeper FK: the visible 3-level chain (all deg) ----
+      const chain = chainDeg;
       const leafW = frameChainWorld(chain);
       // manual step-by-step composition with math.js primitives (rot in rad)
       let mP = [0, 0, 0], mR = rotVecToMat3([0, 0, 0]);
@@ -1571,19 +1582,15 @@ export const EXAMPLES = [
       }
       const chainPosErr = Math.max(...leafW.pos.map((v, i) => Math.abs(v - mP[i])));
       const chainRErr = Math.max(...leafW.R.map((v, i) => Math.abs(v - mR[i])));
-      // cross-check against the Scene DAG worldTransform (SNode.rotation is radians)
-      const sc = new Scene('fk_check');
-      const n0 = sc.newFrame('root', { position: chain[0].pos, rotation: chain[0].rot.map(d => d * (Math.PI / 180)) });
-      const n1 = sc.newFrame('mid', { position: chain[1].pos, rotation: chain[1].rot.map(d => d * (Math.PI / 180)) });
-      const n2 = sc.newFrame('leaf', { position: chain[2].pos, rotation: chain[2].rot.map(d => d * (Math.PI / 180)) });
-      sc.setParent(n1, n0); sc.setParent(n2, n1);
-      const dag = sc.worldTransform(n2);
+      // cross-check against the model's own Scene DAG (SNode.rotation is radians)
+      const dag = sc.worldTransform(frames[2]);
       const dagPosErr = Math.max(...leafW.pos.map((v, i) => Math.abs(v - dag.pos[i])));
       const dagRErr = Math.max(...leafW.R.map((v, i) => Math.abs(v - dag.R[i])));
-      // point attached to leaf frame: p_w = pos + R * p_local (Poi semantics)
-      const pw = pointWorld(leafW, [1, 2, 3]);
-      const pwManual = mat3Vec(leafW.R, [1, 2, 3]).map((v, i) => v + leafW.pos[i]);
+      // point attached to leaf frame: p_w = pos + R * p_local (Poi semantics); poi_tip 挂在 leaf 局部 (1.5,0.5,0.3)
+      const pw = pointWorld(leafW, [2, 0.5, 0.5]);
+      const pwManual = mat3Vec(leafW.R, [2, 0.5, 0.5]).map((v, i) => v + leafW.pos[i]);
       const pwErr = Math.max(...pw.map((v, i) => Math.abs(v - pwManual[i])));
+      const poiTipErr = Math.max(...sc.worldPosition(poiTip).map((v, i) => Math.abs(v - pw[i]))); // 渲染的 POI 就是 pointWorld 结果
       // inverse FK round-trip: worldToLocal(parentWorld, frameWorld(local, parentWorld)) == local
       const parentW = frameChainWorld(chain.slice(0, 2));
       const localPose = { pos: [2, 1, -1], rot: [5, -10, 30] };
@@ -1612,14 +1619,14 @@ export const EXAMPLES = [
       };
       const mul2 = (A, B) => A.map((row, i) => B[0].map((_, j) => row[0] * B[0][j] + row[1] * B[1][j] + row[2] * B[2][j]));
       const apply2 = (A, v) => A.map(row => row[0] * v[0] + row[1] * v[1] + row[2] * v[2]);
-      let maxChainErr = 0, maxDagErr = 0, maxIndepErr = 0, maxInvErr = 0;
+      let maxDagErr = 0, maxIndepErr = 0, maxInvErr = 0;
       for (let t = 0; t < 20; t++) {
-        const chain = Array.from({ length: 4 }, () => ({ pos: [rr(-5, 5), rr(-5, 5), rr(-5, 5)], rot: [rr(-180, 180), rr(-89, 89), rr(-180, 180)] }));
-        const w = frameChainWorld(chain);
+        const rchain = Array.from({ length: 4 }, () => ({ pos: [rr(-5, 5), rr(-5, 5), rr(-5, 5)], rot: [rr(-180, 180), rr(-89, 89), rr(-180, 180)] }));
+        const w = frameChainWorld(rchain);
         // vs Scene DAG worldTransform (SNode.rotation in rad)
         const sc2 = new Scene('rnd' + t);
         let prev = null;
-        const nodes = chain.map((f, i) => {
+        const nodes = rchain.map((f, i) => {
           const n = sc2.newFrame('f' + i, { position: f.pos, rotation: f.rot.map(d => d * (Math.PI / 180)) });
           if (prev) sc2.setParent(n, prev);
           prev = n; return n;
@@ -1628,7 +1635,7 @@ export const EXAMPLES = [
         maxDagErr = Math.max(maxDagErr, ...w.pos.map((v, i) => Math.abs(v - dag2.pos[i])), ...w.R.map((v, i) => Math.abs(v - dag2.R[i])));
         // vs independent 2D Rodrigues composition
         let p2 = [0, 0, 0], R2 = rot2([0, 0, 0]);
-        for (const f of chain) {
+        for (const f of rchain) {
           const Rl = rot2(f.rot.map(d => d * (Math.PI / 180)));
           p2 = apply2(R2, f.pos).map((v, i) => v + p2[i]);
           R2 = mul2(R2, Rl);
@@ -1636,15 +1643,14 @@ export const EXAMPLES = [
         const R2flat = R2.flat();
         maxIndepErr = Math.max(maxIndepErr, ...w.pos.map((v, i) => Math.abs(v - p2[i])), ...w.R.map((v, i) => Math.abs(v - R2flat[i])));
         // inverse round-trip on the leaf
-        const parentW = frameChainWorld(chain.slice(0, 3));
-        const localPose = { pos: chain[3].pos, rot: chain[3].rot };
-        const wPose = frameWorld(localPose, { pos: parentW.pos, rot: mat3ToRotVec(parentW.R).map(v => v * (180 / Math.PI)) });
-        const back = worldToLocal({ pos: parentW.pos, R: parentW.R }, { pos: wPose.pos, R: wPose.R });
+        const rparentW = frameChainWorld(rchain.slice(0, 3));
+        const rlocal = { pos: rchain[3].pos, rot: rchain[3].rot };
+        const rwPose = frameWorld(rlocal, { pos: rparentW.pos, rot: mat3ToRotVec(rparentW.R).map(v => v * (180 / Math.PI)) });
+        const rback = worldToLocal({ pos: rparentW.pos, R: rparentW.R }, { pos: rwPose.pos, R: rwPose.R });
         // rotvec 在角度>180°时轴向翻转等价，故比较旋转矩阵而非分量
-        const Rback = rotVecToMat3(back.rot.map(v => v * (Math.PI / 180)));
-        const Rloc = rotVecToMat3(localPose.rot.map(v => v * (Math.PI / 180)));
-        maxInvErr = Math.max(maxInvErr, ...back.pos.map((v, i) => Math.abs(v - localPose.pos[i])), ...Rback.map((v, i) => Math.abs(v - Rloc[i])));
-        maxChainErr = Math.max(maxChainErr, 0); // chain itself is the reference
+        const Rback = rotVecToMat3(rback.rot.map(v => v * (Math.PI / 180)));
+        const Rloc = rotVecToMat3(rlocal.rot.map(v => v * (Math.PI / 180)));
+        maxInvErr = Math.max(maxInvErr, ...rback.pos.map((v, i) => Math.abs(v - rlocal.pos[i])), ...Rback.map((v, i) => Math.abs(v - Rloc[i])));
       }
       return [
         { name: 'DAVE 单位制: 12300 mT = 1.23e7 kg; 10 kN = 1e4 N; 90° = π/2', expected: 1, actual: (u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12) ? 1 : 0, unit: '-', tol: 0, pass: u.massToSI(12300) === 1.23e7 && u.forceToSI(10) === 1e4 && Math.abs(u.angleToSI(90) - Math.PI / 2) < 1e-12 },
@@ -1652,7 +1658,7 @@ export const EXAMPLES = [
         { name: `NODE_TYPES 覆盖全部 ${daveClasses.length} 个 DAVE 节点类`, expected: 0, actual: missing.length, unit: '-', tol: 0, absFloor: 0, pass: missing.length === 0 },
         { name: 'FK: 子 frame 局部(2,0,0) 在父(10,0,5,yaw30°) → 世界 x = 10+2cos30', expected: 10 + 2 * c30, actual: fk.pos[0], unit: 'm', tol: 1e-12 },
         { name: 'FK: 世界 y = 2sin30 = 1, z = 5', expected: 1, actual: Math.abs(fk.pos[1] - 1) < 1e-12 && Math.abs(fk.pos[2] - 5) < 1e-12 ? 1 : 0, unit: 'm', tol: 0, absFloor: 0, pass: Math.abs(fk.pos[1] - 1) < 1e-12 && Math.abs(fk.pos[2] - 5) < 1e-12 },
-        { name: 'B 帧世界坐标与 frameWorld 一致', expected: fk.pos[0], actual: B.pos[0], unit: 'm', tol: 1e-9 },
+        { name: '可视化链: 箱体 fk1 世界坐标 == frameChainWorld(前两级) (B 帧 FK 一致)', expected: frameChainWorld(chain.slice(0, 2)).pos[0], actual: B.pos[0], unit: 'm', tol: 1e-9 },
         { name: '旋转合成: 父 yaw30° + 子 yaw30° → 世界 yaw 60°', expected: 60, actual: compDeg, unit: 'deg', tol: 1e-9 },
         { name: 'heading: rotvec(30,0,0) → heading=30°, tilt=0', expected: 30, actual: e1.heading, unit: 'deg', tol: 1e-9 },
         { name: 'tilt_y: rotvec(0,0,25) → tilt_y=25° (绕 y 正转 → 正 tilt_y)', expected: 25, actual: e2.tilt_y, unit: 'deg', tol: 1e-9 },
@@ -1665,6 +1671,7 @@ export const EXAMPLES = [
         { name: '深挖 FK·与 Scene DAG worldTransform 一致 (pos 误差)', expected: 0, actual: dagPosErr, unit: 'm', tol: 1, absFloor: 1e-12 },
         { name: '深挖 FK·与 Scene DAG worldTransform 一致 (R 误差)', expected: 0, actual: dagRErr, unit: '-', tol: 1, absFloor: 1e-12 },
         { name: '深挖 FK·点随 frame 变换 pointWorld: p_w = pos + R·p_local', expected: 0, actual: pwErr, unit: 'm', tol: 1, absFloor: 1e-12 },
+        { name: '深挖 FK·渲染的 poi_tip 世界坐标 == pointWorld(leaf, 局部点) (截图可见）', expected: 0, actual: poiTipErr, unit: 'm', tol: 1, absFloor: 1e-12 },
         { name: '深挖 FK·逆变换往返 worldToLocal∘frameWorld = identity (pos 误差)', expected: 0, actual: invPosErr, unit: 'm', tol: 1, absFloor: 1e-9 },
         { name: '深挖 FK·逆变换往返 (rot 矩阵误差)', expected: 0, actual: backRotErr, unit: '-', tol: 1, absFloor: 1e-9 },
         { name: '深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差)', expected: 0, actual: mixErr, unit: '-', tol: 1, absFloor: 1e-12 },
