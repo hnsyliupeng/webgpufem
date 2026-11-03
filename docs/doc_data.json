@@ -513,7 +513,7 @@
         [
          "Frame 与正向运动学（FK)",
          "节点位置/姿态均相对 parent frame；世界变换 = 父世界 × 局部（T_world = T_parent · T_local)；多级链逐层累乘",
-         "frameWorld（单级；local.rot 与 parent.rot **均为 rotation vector in degrees**，DAVE 角度约定）、frameChainWorld（多级链，rot 统一 degrees)、pointWorld（局部点→世界 p_w=pos+R·p)、worldToLocal（逆 FK，rot 返回 deg)；ex32 与 Scene DAG worldTransform 交叉验证（pos/R 误差 < 1e-12)、逆变换往返误差 < 1e-9、并专设 guard 防 rot 被误按弧度解析"
+         "frameWorld（单级；local.rot 与 parent.rot **均为 rotation vector in degrees**，DAVE 角度约定）、frameChainWorld（多级链，rot 统一 degrees)、pointWorld（局部点→世界 p_w=pos+R·p)、worldToLocal（逆 FK，rot 返回 deg)；ex32 与 Scene DAG worldTransform 交叉验证（链式 FK 只累乘矩阵，与手工合成逐位相等 err=0.0000)、逆变换往返误差 < 1e-9（机器精度量级)、并专设 guard 防 rot 被误按弧度解析"
         ],
         [
          "Rotation vector（旋转向量）",

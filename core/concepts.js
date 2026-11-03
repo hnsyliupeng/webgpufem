@@ -61,26 +61,29 @@ export const NODE_TYPES = [
 // (DAVE stores all angles, including rotation vectors, in degrees).
 // local:  { pos:[x,y,z] m (parent-relative), rot:[rx,ry,rz] deg (parent-relative) }
 // parent: { pos:[..] m, rot:[..] deg } world pose of the parent (or null for global)
+const DEG = Math.PI / 180;
+// internal pose composition: parent given as world pose { pos, R } (no rotvec round-trip,
+// so chained FK is bitwise identical to step-by-step manual matrix composition)
+function poseWorld(local, parentPose) {
+  const localR = rotVecToMat3((local.rot || [0, 0, 0]).map(d => d * DEG));
+  if (!parentPose) return { pos: [...(local.pos || [0, 0, 0])], R: localR };
+  const pos = mat3Vec(parentPose.R, local.pos || [0, 0, 0]).map((v, i) => v + parentPose.pos[i]);
+  return { pos, R: mat3Mul(parentPose.R, localR) };
+}
 export function frameWorld(local, parent) {
-  const toRad = (r) => (r || [0, 0, 0]).map(d => d * Math.PI / 180);
-  const localR = rotVecToMat3(toRad(local.rot));
-  if (!parent) return { pos: [...(local.pos || [0, 0, 0])], R: localR };
-  const pR = rotVecToMat3(toRad(parent.rot));
-  const pos = mat3Vec(pR, local.pos || [0, 0, 0]).map((v, i) => v + parent.pos[i]);
-  return { pos, R: mat3Mul(pR, localR) };
+  if (!parent) return poseWorld(local, null);
+  const pR = rotVecToMat3((parent.rot || [0, 0, 0]).map(d => d * DEG));
+  return poseWorld(local, { pos: parent.pos || [0, 0, 0], R: pR });
 }
 
 // ---- multi-level frame chain FK: all rotations in DEGREES (DAVE convention) ----
 // frames: [{ pos:[x,y,z], rot:[rx,ry,rz] deg }, ...] ordered root -> ... -> leaf.
 // Equivalent to walking the Scene DAG: T_world(node) = T_world(parent) * T_local(node).
 export function frameChainWorld(frames) {
-  let acc = null; // world pose of current frame: { pos, rot(deg rotvec) }
-  for (const f of frames) {
-    const w = frameWorld({ pos: f.pos || [0, 0, 0], rot: f.rot || [0, 0, 0] }, acc);
-    acc = { pos: w.pos, rot: mat3ToRotVec(w.R).map(v => v * 180 / Math.PI) };
-  }
+  let acc = null; // world pose { pos, R } accumulated as matrices only — err vs manual composition is exactly 0
+  for (const f of frames) acc = poseWorld({ pos: f.pos || [0, 0, 0], rot: f.rot || [0, 0, 0] }, acc);
   if (!acc) return { pos: [0, 0, 0], R: rotVecToMat3([0, 0, 0]) };
-  return { pos: acc.pos, R: rotVecToMat3(acc.rot.map(d => d * Math.PI / 180)) }; // acc.rot 为 deg
+  return acc;
 }
 
 // point expressed in frame-local coordinates -> world: p_w = frame.pos + frame.R * p_local
