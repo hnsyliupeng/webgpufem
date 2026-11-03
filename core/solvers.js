@@ -27,6 +27,34 @@ export function updateAttachments(model, t) {
 }
 
 // attach line end forces back onto bodies as external loads
+// DAVE-style elements (Spring/Force/LinCon6/Hinge/Tank/...) inject into body.external after line reactions.
+export function applyElements(model, t) {
+  if (!model.elements) return;
+  for (const e of model.elements) if (e.apply) e.apply(model, t);
+}
+
+// DAVE-style goal_seek: adjust a scalar node property until evaluate(model) hits target (bisection on a bracket).
+export function goalSeek(model, { evaluate, target, setValue, lo, hi, tol = 1e-6, maxIter = 60 }) {
+  let a = lo, b = hi;
+  const f = (v) => { setValue(v); computeStatics(model, { tol: 1e-9, maxIter: 40 }); return evaluate(model) - target; };
+  let fa = f(a), fb = f(b);
+  if (fa * fb > 0) return { converged: false, value: null, fa, fb };
+  let v = a, fv = fa, i = 0;
+  for (; i < maxIter; i++) {
+    v = 0.5 * (a + b); fv = f(v);
+    if (Math.abs(fv) < tol || (b - a) < tol * Math.max(1, Math.abs(v))) break;
+    if (fa * fv <= 0) { b = v; fb = fv; } else { a = v; fa = fv; }
+  }
+  return { converged: true, value: v, residual: fv, iterations: i };
+}
+
+// recompute all external loads on bodies (lines + elements) at time t — call before reading reactions
+export function refreshExternal(model, t = 0) {
+  updateAttachments(model, t);
+  coupleLinesToBodies(model);
+  applyElements(model, t);
+}
+
 export function coupleLinesToBodies(model) {
   for (const b of model.bodies) b.external = [];
   for (const l of model.lines) {
@@ -61,7 +89,7 @@ function getState(model, dofs) {
 function setState(model, dofs, x) {
   dofs.forEach((d, j) => { if (d.kind === 'line') d.obj.pos[d.node][d.k] = x[j]; else d.obj.q[d.i] = x[j]; });
 }
-function residualVector(model, t = 0) {
+export function residualVector(model, t = 0) {
   updateAttachments(model, t);
   const R = [];
   for (const l of model.lines) {
@@ -72,22 +100,32 @@ function residualVector(model, t = 0) {
     }
   }
   coupleLinesToBodies(model); // fresh reactions -> bodies
+  applyElements(model, t);   // DAVE elements -> bodies
   for (const b of model.bodies) {
     const F = b.generalizedForce(t);
     for (let i = 0; i < 6; i++) if (!b.fixed[i]) R.push(F[i]);
   }
   return R;
 }
-function residualNorm(model, R) {
-  // scale by weight-like reference
-  let s = 0, j = 0;
+// tension floor for line-node residual scaling (0 = original weight-only scaling).
+// The LM path enables it so taut light lines don't dominate the merit by 1e7x.
+export const scaledOpts = { tensionFloor: 0 };
+export function residualScaled(model, R) {
+  // per-entry scaled residuals (dimensionless): line node forces by node weight,
+  // body generalized forces by weight / torque reference
+  const out = [];
+  let j = 0;
   for (const l of model.lines) {
     l.computeForces(0);
+    let maxT = 0;
+    for (const t of l.segT) { const a = Math.abs(t); if (a > maxT) maxT = a; }
     for (let i = 0; i <= l.nSeg; i++) {
       const fixed = (i === 0 && l.fixedEnds.A) || (i === l.nSeg && l.fixedEnds.B);
       if (fixed) continue;
-      const m = Math.max(l.mEff[i], 1e-6);
-      for (let k = 0; k < 3; k++) { const r = R[j++] / (m * G + 1e-9); s = Math.max(s, Math.abs(r)); }
+      // scale by node weight, but never below a fraction of the line tension —
+      // otherwise taut light lines make node residuals dominate the merit by 1e7x
+      const m = Math.max(l.mEff[i] * G, 1e-3, scaledOpts.tensionFloor * maxT);
+      for (let k = 0; k < 3; k++) out.push(R[j++] / (m + 1e-9));
     }
   }
   for (const b of model.bodies) {
@@ -95,14 +133,27 @@ function residualNorm(model, R) {
     for (let i = 0; i < 6; i++) {
       if (b.fixed[i]) continue;
       const scale = i < 3 ? b.mass * G : b.inertia[i - 3] * G / Math.max(b.L || 10, 1);
-      const r = F[i] / (scale + 1e-9);
-      s = Math.max(s, Math.abs(r));
+      out.push(F[i] / (scale + 1e-9));
     }
   }
+  return out;
+}
+export function residualNorm(model, R) {
+  const rs = residualScaled(model, R);
+  let s = 0;
+  for (const r of rs) { const a = Math.abs(r); if (a > s) s = a; }
   return s;
+}
+export function residualL2(model, R) {
+  const rs = residualScaled(model, R);
+  let s = 0;
+  for (const r of rs) s += r * r;
+  return Math.sqrt(s);
 }
 
 export function computeStatics(model, opts = {}) {
+  if (opts.mode !== 'lm') { scaledOpts.tensionFloor = 0; return computeStaticsLegacy(model, opts); } // legacy = default; 'lm' = adaptive LM
+  scaledOpts.tensionFloor = opts.tensionFloor ?? 0.05;
   const tol = opts.tol ?? 1e-7;
   const maxIter = opts.maxIter ?? 60;
   for (const l of model.lines) l.relaxCompression = true; // linear tension during Newton
@@ -113,10 +164,104 @@ export function computeStatics(model, opts = {}) {
   let x = [...x0];
   let R = residualVector(model, 0);
   let res = residualNorm(model, R);
+  let res2 = residualL2(model, R);
+  let iter = 0;
+  const hist = [res];
+  let mu = opts.mu ?? 1e-10; // adaptive LM damping
+  const lim = opts.stepLim ?? 1e12;   // optional max line-node increment (off by default; LM + line search protect)
+  const bodyLim = opts.bodyLim ?? 1e12; // optional max body-dof increment
+  for (iter = 0; iter < maxIter && res > tol; iter++) {
+    // numeric Jacobian (central differences)
+    const n = dofs.length;
+    const J = Array.from({ length: R.length }, () => new Float64Array(n));
+    for (let j = 0; j < n; j++) {
+      const d = dofs[j].kind === 'line' ? 1e-6 : 1e-7;
+      x[j] += d; setState(model, dofs, x);
+      const Rp = residualVector(model, 0);
+      x[j] -= 2 * d; setState(model, dofs, x);
+      const Rm = residualVector(model, 0);
+      x[j] += d; setState(model, dofs, x);
+      for (let i = 0; i < R.length; i++) J[i][j] = (Rp[i] - Rm[i]) / (2 * d);
+    }
+    // normal equations JtJ, JtR
+    const A = Array.from({ length: n }, () => new Float64Array(n));
+    const b = new Float64Array(n);
+    for (let i = 0; i < R.length; i++) {
+      const Ji = J[i];
+      for (let j = 0; j < n; j++) {
+        const Jij = Ji[j];
+        if (Jij === 0) continue;
+        b[j] += Jij * R[i];
+        const Aj = A[j];
+        for (let k = 0; k <= j; k++) Aj[k] += Jij * Ji[k];
+      }
+    }
+    for (let j = 0; j < n; j++) for (let k = 0; k < j; k++) A[k][j] = A[j][k];
+    let meanDiag = 0;
+    for (let j = 0; j < n; j++) meanDiag += Math.abs(A[j][j]);
+    meanDiag = n > 0 ? meanDiag / n : 1;
+    // adaptive LM: increase damping until the step reduces the residual
+    let accepted = false, xNew = x, resNew = res, res2New = res2, lam = 1;
+    for (let att = 0; att < 10 && !accepted; att++) {
+      const Atry = A.map((r, j) => { const row = Array.from(r); row[j] = r[j] * (1 + mu) + mu * meanDiag + 1e-12; return row; });
+      let dq;
+      try { dq = solveLin(Atry, Array.from(b, v => -v)); } catch (e) { mu = Math.min(mu * 10, 1e6); continue; }
+      if (!dq.every(Number.isFinite)) { mu = Math.min(mu * 10, 1e6); continue; }
+      // per-kind trust caps (ratios within each kind preserved)
+      let maxLine = 0, maxBody = 0;
+      for (let j = 0; j < dq.length; j++) {
+        const a = Math.abs(dq[j]);
+        if (dofs[j].kind === 'line') { if (a > maxLine) maxLine = a; } else if (a > maxBody) maxBody = a;
+      }
+      const sL = maxLine > lim ? lim / maxLine : 1;
+      const sB = maxBody > bodyLim ? bodyLim / maxBody : 1;
+      const dqs = dq.map((v, j) => v * (dofs[j].kind === 'line' ? sL : sB));
+      lam = 1;
+      for (let ls = 0; ls < 40; ls++) {
+        const xt = x.map((v, j) => v + lam * dqs[j]);
+        setState(model, dofs, xt);
+        const Rn = residualVector(model, 0);
+        resNew = residualNorm(model, Rn);
+        res2New = residualL2(model, Rn);
+        if (res2New < res2) { accepted = true; xNew = xt; break; }
+        lam *= 0.5;
+      }
+      if (!accepted) mu = Math.min(mu * 10, 1e8);
+    }
+    if (accepted) mu = Math.max(mu / 10, 1e-12);
+    x = xNew; setState(model, dofs, x);
+    R = residualVector(model, 0);
+    res = residualNorm(model, R);
+    res2 = residualL2(model, R);
+    hist.push(res);
+    if (opts.trace && (iter % 10 === 0 || res < 1e-6)) console.log(`    [statics] iter=${iter} res=${res.toExponential(3)} l2=${res2.toExponential(3)} mu=${mu.toExponential(2)} lam=${lam.toExponential(2)} acc=${accepted}`);
+  }
+  setState(model, dofs, x);
+  for (const l of model.lines) l.relaxCompression = false;
+  updateAttachments(model, 0);
+  coupleLinesToBodies(model);
+  for (const l of model.lines) l.computeForces(0);
+  for (const b of model.bodies) b.generalizedForce(0);
+  return { residual: res, iterations: iter, converged: res < tol, history: hist };
+}
+
+// legacy Newton (direct solve + global trust scale on line dofs + max-norm merit with
+// bounded creep) — kept as opts.mode='legacy'; the default adaptive-LM path handles
+// stiff/ill-conditioned models (chains, taut light lines) that stall this one.
+export function computeStaticsLegacy(model, opts = {}) {
+  const tol = opts.tol ?? 1e-7;
+  const maxIter = opts.maxIter ?? 60;
+  for (const l of model.lines) l.relaxCompression = true;
+  updateAttachments(model, 0);
+  for (const l of model.lines) { const [a, b] = l.endPositions(); l.init(a, b); }
+  const dofs = gatherDOFs(model);
+  const x0 = getState(model, dofs);
+  let x = [...x0];
+  let R = residualVector(model, 0);
+  let res = residualNorm(model, R);
   let iter = 0;
   const hist = [res];
   for (iter = 0; iter < maxIter && res > tol; iter++) {
-    // numeric Jacobian (central differences)
     const n = dofs.length;
     const J = Array.from({ length: R.length }, () => new Float64Array(n));
     for (let j = 0; j < n; j++) {
@@ -131,24 +276,25 @@ export function computeStatics(model, opts = {}) {
     const Jrows = J.map((r, i) => { const row = Array.from(r); row[i] += 1e-7 * (1 + Math.abs(row[i])); return row; });
     let dq;
     try { dq = solveLin(Jrows, R.map(v => -v)); } catch (e) { break; }
-    // trust-region: limit max position increment
-    const maxDq = Math.max(...dq.map((v, j) => dofs[j].kind === 'line' ? Math.abs(v) : 0));
+    let maxDq = 0;
+    for (let j = 0; j < dq.length; j++) if (dofs[j].kind === 'line') { const a = Math.abs(dq[j]); if (a > maxDq) maxDq = a; }
     const lim = opts.stepLim ?? 0.25;
     if (maxDq > lim) dq = dq.map(v => v * lim / maxDq);
-    // line search
-    let lam = 1, resNew = res, xNew = x;
-    for (let ls = 0; ls < 24; ls++) {
+    let lam = 1, resNew = res, xNew = x, accepted = false;
+    for (let ls = 0; ls < 30; ls++) {
       xNew = x.map((v, j) => v + lam * dq[j]);
       setState(model, dofs, xNew);
       const Rn = residualVector(model, 0);
       resNew = residualNorm(model, Rn);
-      if (resNew < res || lam < 1e-6) break;
+      if (resNew < res || (lam < 1e-6 && resNew < 2 * res)) { accepted = true; break; }
       lam *= 0.5;
     }
+    if (!accepted) { xNew = [...x]; setState(model, dofs, x); }
     x = xNew; setState(model, dofs, x);
     R = residualVector(model, 0);
     res = residualNorm(model, R);
     hist.push(res);
+    if (opts.trace && (iter % 10 === 0 || res < 1e-6)) console.log(`    [legacy] iter=${iter} res=${res.toExponential(3)} lam=${lam.toExponential(2)} acc=${accepted}`);
   }
   setState(model, dofs, x);
   for (const l of model.lines) l.relaxCompression = false;
@@ -196,6 +342,7 @@ export function runDynamics(model, opts = {}) {
     dt = Math.min(dt, tEnd - t);
     updateAttachments(model, t);
     coupleLinesToBodies(model);
+    applyElements(model, t);
     for (const l of model.lines) l.step(dt, t);
     for (const b of model.bodies) b.step(dt, t);
     t += dt; step++;

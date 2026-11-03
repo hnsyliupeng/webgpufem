@@ -19,7 +19,7 @@ for (const ex of EXAMPLES) {
   const t0 = Date.now();
   const model = ex.build();
   // statics
-  const st = computeStatics(model, { tol: 1e-7, maxIter: 80 });
+  const st = computeStatics(model, { tol: 1e-7, maxIter: Number(process.env.STATICS_MAXITER || 80) });
   const staticTension = model.lines[0] ? model.lines[0].segT[0] : null;
   const staticReaction = model.lines[0] ? Math.hypot(...model.lines[0].reactionA) : null;
   const staticHeave = model.bodies[0] ? model.bodies[0].q[2] : 0;

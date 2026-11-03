@@ -10,9 +10,14 @@ import { LineGeometry } from 'three/addons/LineGeometry.js';
 import { LineMaterial } from 'three/addons/LineMaterial.js';
 import { EXAMPLES, getExample } from '../examples/index.js';
 import * as sv from '../core/solvers.js';
+import { attachWorld } from '../core/elements.js';
 import { describeScene, tensionColor } from '../core/render_scene.js';
 import { waveNumber } from '../core/waves.js';
 import { VERIFICATION } from './verification_data.js';
+import { loadDaveModel } from '../core/dave_import.js';
+import { Model } from '../core/scene.js';
+import CUBE_OBJ_ASSET from '../examples/assets/cube.obj.js';
+const DAVE_ASSET_MAP = { 'cube.obj': CUBE_OBJ_ASSET };
 import { DOC_META, DOC_SECTIONS } from '../docs/doc_data.js';
 import { FLOWCHARTS, flowchartSVG } from '../core/flowcharts.js';
 
@@ -38,6 +43,7 @@ function fallbackDraw() {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#060b16'; ctx.fillRect(0, 0, w, h);
   const img = shotImgs[curEx.id];
+  if (!img) return;
   if (img && img.complete && img.naturalWidth) {
     const sc = Math.min(w / img.naturalWidth, h / img.naturalHeight);
     ctx.drawImage(img, (w - img.naturalWidth * sc) / 2, (h - img.naturalHeight * sc) / 2, img.naturalWidth * sc, img.naturalHeight * sc);
@@ -97,6 +103,7 @@ function setWaterT(model, t) {
 const lineViz = new Map();
 const bodyViz = new Map();
 const poiViz = new Map();
+const elViz = new Map(); // DAVE element connectors (Spring/Hinge/LC6d/...)
 let selMarker = null;
 
 function clearModelViz() {
@@ -106,6 +113,8 @@ function clearModelViz() {
   bodyViz.clear();
   for (const p of poiViz.values()) grpModel.remove(p);
   poiViz.clear();
+  for (const l of elViz.values()) grpModel.remove(l);
+  elViz.clear();
   if (selMarker) { grpModel.remove(selMarker); selMarker = null; }
 }
 
@@ -156,6 +165,24 @@ function renderSnap(model, snap) {
     v.geo.setPositions(v.pos); v.geo.setColors(v.col);
     v.pts.geometry.attributes.position.needsUpdate = true;
   }
+  for (const e of (model.elements || [])) { // DAVE element connectors
+    let le = elViz.get(e.name);
+    if (!le) {
+      const pos = new Float32Array(6);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const col = e.type === 'GeometricContact' ? 0x22d3ee : (e.type === 'ContactBall' ? 0xf472b6 : 0xa3e635);
+      le = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: col }));
+      le.frustumCulled = false; le.userData.ref = { kind: 'element', name: e.name };
+      grpModel.add(le); elViz.set(e.name, le);
+    }
+    const a = e.attA ? attachWorld(e.attA, model) : (e.att ? attachWorld(e.att, model) : null);
+    const b = e.attB ? attachWorld(e.attB, model) : a;
+    const p = le.geometry.attributes.position.array;
+    if (a) { p[0] = a[0]; p[1] = a[1]; p[2] = a[2]; }
+    if (b) { p[3] = b[0]; p[4] = b[1]; p[5] = b[2]; } else if (a) { p[3] = a[0]; p[4] = a[1]; p[5] = a[2]; }
+    le.geometry.attributes.position.needsUpdate = true;
+  }
   for (const b of desc.bodies) {
     const m = ensureBodyViz(b.name, b);
     m.position.set(...b.pos);
@@ -183,6 +210,7 @@ canvas.addEventListener('pointerdown', (e) => {
   for (const m of bodyViz.values()) objs.push(m);
   for (const v of lineViz.values()) objs.push(v.pts);
   for (const p of poiViz.values()) objs.push(p);
+  for (const l of elViz.values()) objs.push(l);
   const hits = raycaster.intersectObjects(objs, false);
   if (hits.length && hits[0].object.userData.ref) { inspect(hits[0].object.userData.ref); highlight(hits[0].object.userData.ref); }
 });
@@ -193,6 +221,7 @@ function placeMarker() {
   if (selRef.kind === 'body') { const b = sim?.model.bodies.find(x => x.name === selRef.name); if (b) p = b.worldOrigin(); }
   else if (selRef.kind === 'poi') { const n = sim?.model.scene.get(selRef.name); if (n) p = sim.model.scene.worldPosition(n); }
   else if (selRef.kind === 'line') { const l = sim?.model.lines.find(x => x.name === selRef.name); if (l) p = l.pos[Math.floor(l.nSeg / 2)]; }
+  else if (selRef.kind === 'element') { const e = sim?.model.elements?.find(x => x.name === selRef.name); if (e) p = e.attA ? attachWorld(e.attA, sim.model) : (e.att ? attachWorld(e.att, sim.model) : null); }
   if (p && selMarker) selMarker.position.set(p[0], p[1], p[2]);
 }
 function highlight(ref) {
@@ -262,6 +291,7 @@ function tickInner() {
     const stepIdx = Math.round(s.t / s.dt);
     sv.updateAttachments(s.model, s.t);
     sv.coupleLinesToBodies(s.model);
+    sv.applyElements(s.model, s.t); // DAVE elements (Spring/Hinge/Tank/...) -> body loads
     for (const l of s.model.lines) l.step(s.dt, s.t);
     for (const b of s.model.bodies) b.step(s.dt, s.t);
     s.t += s.dt;
@@ -354,6 +384,7 @@ function buildTree(model) {
     treeNode(`Scene (${model.scene.nodes.size} nodes)`, { kind: 'env' }, sceneKids),
     treeNode(`Bodies (${model.bodies.length})`, { kind: 'env' }, model.bodies.map(b => treeNode(`${b.type} ${b.name}`, { kind: 'body', name: b.name }))),
     treeNode(`Lines (${model.lines.length})`, { kind: 'env' }, model.lines.map(l => treeNode(`Line ${l.name}`, { kind: 'line', name: l.name }))),
+    treeNode(`Elements (${(model.elements || []).length})`, { kind: 'env' }, (model.elements || []).map(e => treeNode(`${e.type} ${e.name}`, { kind: 'element', name: e.name }))),
     treeNode(`Winches (${model.winches.length})`, { kind: 'env' }, model.winches.map((w, i) => treeNode(`Winch${i} → ${w.line.name} rate=${w.rate}`, { kind: 'winch', index: i }))),
     treeNode('Environment', { kind: 'env' }),
   ];
@@ -376,6 +407,10 @@ function inspect(ref) {
     const b = m.bodies.find(x => x.name === ref.name);
     if (!b) { el.innerHTML = '未找到'; return; }
     rows = [['name', b.name], ['type', b.type], ['mass (kg)', fmt(b.mass)], ['inertia', fv(b.inertia)], ['K (hydro)', fv(b.K)], ['pos', fv(b.pos)], ['q (实时)', fv(b.q)], ['qd (实时)', fv(b.qd)], ['fixed', fv(b.fixed)], ['worldOrigin', fv(b.worldOrigin())]];
+  } else if (ref.kind === 'element') {
+    const e = (m.elements || []).find(x => x.name === ref.name);
+    if (!e) { el.innerHTML = '未找到'; return; }
+    rows = [['name', e.name], ['type (DAVE 节点)', e.type], ['lastF (N)', fv(e.lastF)], ['lastErr (m)', fmt(e.lastErr)], ['lastL (m)', fmt(e.lastL)], ['lastFz (N)', fmt(e.lastFz)], ['k / K', fv(e.k ?? e.K)], ['L0 / V / r', fmt(e.L0 ?? e.V ?? e.r)]];
   } else if (ref.kind === 'line') {
     const l = m.lines.find(x => x.name === ref.name);
     if (!l) { el.innerHTML = '未找到'; return; }
@@ -443,6 +478,54 @@ function download(name, text, type = 'text/plain') {
 $('#btnJson').onclick = () => sim && download(`webgpufem_${curEx.id}.scene.json`, sim.model.saveJSON(), 'application/json');
 $('#btnYaml').onclick = () => sim && download(`webgpufem_${curEx.id}.yml`, sim.model.exportOrcaFlexYAML(), 'text/yaml');
 $('#btnPy').onclick = () => sim && download(`webgpufem_${curEx.id}.py`, sim.model.exportDavePy(), 'text/x-python');
+// ---------------- import model files (.dave / .json) ----------------
+$('#btnImport').onclick = () => $('#fileImport').click();
+$('#fileImport').onchange = async (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  const text = await f.text();
+  let model = null;
+  try {
+    if (/\.dave$/i.test(f.name) || (/\.py$/i.test(f.name) && /\bs\.new_/m.test(text))) {
+      model = loadDaveModel(text, {
+        name: 'import_' + f.name.replace(/\.[a-z]+$/i, ''),
+        resolveAsset: (n) => DAVE_ASSET_MAP[String(n).split('/').pop()] ?? null,
+      });
+      model.meta.importedFile = f.name;
+    } else if (/\.json$/i.test(f.name)) {
+      model = Model.fromJSON(JSON.parse(text));
+      model.meta.importedFile = f.name;
+    } else {
+      alert('不支持的文件类型：请选择 .dave（DAVE 建模脚本）、.py（含 s.new_* 调用）或本系统导出的 .json');
+      return;
+    }
+  } catch (err) {
+    alert('导入失败: ' + err.message);
+    return;
+  }
+  // auto camera from model extent
+  const ps = model.bodies.map(b => b.pos);
+  const c = [0, 0, 0];
+  for (const p of ps) { c[0] += p[0] / ps.length; c[1] += p[1] / ps.length; c[2] += p[2] / ps.length; }
+  const r = Math.max(30, ...ps.map(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]))) * 2.2;
+  curEx = {
+    id: 'imported', name: '⬆ ' + f.name,
+    desc: `导入的模型文件 <code>${f.name}</code>：${model.bodies.length} 刚体 / ${model.lines.length} 缆 / ${model.elements.length} 元件` +
+      (model.meta.daveSource ? '（由 <b>.dave 文件经 core/dave_import.js 解析构建</b>，Scene DAG 见左侧场景树）' : '（JSON 场景）') +
+      (model.meta.visuals?.length ? `；可视化/水动力文件未仿真: ${model.meta.visuals.map(v => v.name).join(', ')}` : ''),
+    analysis: { kind: 'statics' },
+    camera: { pos: [c[0] + r * 0.7, c[1] - r, c[2] + r * 0.5], target: c },
+    build: () => model,
+  };
+  document.querySelectorAll('.exitem').forEach(e => e.classList.remove('on'));
+  $('#exdesc').innerHTML = curEx.desc;
+  $('#liveresult').innerHTML = '';
+  history.replaceState(null, '', location.pathname);
+  startExample(curEx, 'statics');
+  $('#prog').textContent += ` · 已导入 ${f.name}`;
+};
+
 $('#btnShot').onclick = () => {
   if (!curEx) return;
   if (renderer) { renderer.render(scene, camera); const a = document.createElement('a'); a.href = renderer.domElement.toDataURL('image/png'); a.download = `webgpufem_${curEx.id}_view.png`; a.click(); }
@@ -506,7 +589,7 @@ $('#btnDyn').onclick = () => curEx && curEx.analysis.kind === 'dynamics' && star
 // ---------------- verification tab ----------------
 function buildVerify() {
   const el = $('#tab-verify');
-  let html = `<div class="exblock"><h3>汇总</h3><p>${VERIFICATION.allPass ? '<span class="pass">全部 10 个算例 PASS</span>' : '<span class="fail">存在失败</span>'} · 生成时间 ${VERIFICATION.generated} · 运行器 <code>node tools/run_examples.mjs</code> · 也可点左侧“🧪 重跑校核”在浏览器内 live 重跑</p><img src="screenshots/verification_overview.png" style="width:100%;border-radius:8px" alt="verification overview"></div>`;
+  let html = `<div class="exblock"><h3>汇总</h3><p>${VERIFICATION.allPass ? '<span class="pass">全部算例 PASS（共 ${VERIFICATION.results.length} 个）</span>' : '<span class="fail">存在失败</span>（共 ${VERIFICATION.results.length} 个）'} · 生成时间 ${VERIFICATION.generated} · 运行器 <code>node tools/run_examples.mjs</code> · 也可点左侧“🧪 重跑校核”在浏览器内 live 重跑</p><img src="screenshots/verification_overview.png" style="width:100%;border-radius:8px" alt="verification overview"></div>`;
   for (const r of VERIFICATION.results) {
     html += `<div class="exblock"><h3>${r.id} ${esc(r.name)}</h3><table class="v"><tr><th>校核项</th><th>期望</th><th>实际</th><th>单位</th><th>结果</th></tr>`;
     for (const c of r.checks) html += `<tr><td>${esc(c.name)}</td><td>${fmt(c.expected)}</td><td>${fmt(c.actual)}</td><td>${esc(c.unit || '')}</td><td class="${c.pass ? 'pass' : 'fail'}">${c.pass ? 'PASS' : 'FAIL'}</td></tr>`;
@@ -572,7 +655,7 @@ try {
   const st0 = sv.computeStatics(m0, { tol: 1e-7 });
   const ok0 = st0.residual < 1e-6;
   const badge = document.querySelector('.badge');
-  badge.textContent = `v${window.__APP_VERSION || 'dev'} · 清洁室实现 · 内核自检 ${ok0 ? 'PASS' : 'FAIL'}（ex01 静力残差 ${st0.residual.toExponential(1)}）`;
+  badge.textContent = `v${window.__APP_VERSION || 'dev'} · 清洁室实现 · DAVE 节点支持 · 内核自检 ${ok0 ? 'PASS' : 'FAIL'}（ex01 静力残差 ${st0.residual.toExponential(1)}）`;
   badge.style.color = ok0 ? '#34d399' : '#f87171';
 } catch (e) {
   document.querySelector('.badge').textContent = '内核自检异常: ' + e.message;

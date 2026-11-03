@@ -109,12 +109,14 @@ export class Model {
     this.lines = [];
     this.bodies = [];   // RigidBody6DOF
     this.winches = [];  // {line, rate, L0, tStart, tEnd}
+    this.elements = []; // DAVE-style elements: Spring/Force/Beam/LinCon6/Hinge/ContactBall/Tank/... (core/elements.js)
     this.analysis = { type: 'time', tEnd: 30, dt: 0, sampleEvery: 10, staticsFirst: true };
     this.channels = []; // {name, fn(model, t) -> number}
     this.meta = {};
   }
   addLine(line) { this.lines.push(line); return line; }
   addBody(b) { this.bodies.push(b); return b; }
+  addElement(e) { this.elements.push(e); return e; }
   toJSON() {
     return {
       name: this.name, env: {
@@ -139,6 +141,7 @@ export class Model {
         addedMass: b.addedMass, damping: b.damping, windArea: b.windArea, currentArea: b.currentArea,
       })),
       winches: this.winches.map(w => ({ line: w.line.name, rate: w.rate, L0: w.L0, tStart: w.tStart, tEnd: w.tEnd })),
+      elements: this.elements.map(e => ({ type: e.type, name: e.name })),
       analysis: this.analysis,
       meta: this.meta,
     };

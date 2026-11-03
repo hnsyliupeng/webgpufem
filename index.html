@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WebGPUFEM — OrcaFlex/DAVE 风格海洋分析 (本地独立运行)</title>
-<link rel="stylesheet" href="./app/style.css?v=1.1.0">
+<link rel="stylesheet" href="./app/style.css?v=1.3.0">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta http-equiv="Pragma" content="no-cache">
 <script>
@@ -48,6 +48,8 @@ window.addEventListener('unhandledrejection', function (e) {
       <button id="btnYaml" title="OrcaFlex 风格 YAML">⬇ YAML</button>
       <button id="btnPy" title="DAVE 风格 Python 建模脚本">⬇ .py</button>
       <button id="btnShot" title="保存当前 3D 画面为 PNG">🖼 画面</button>
+      <button id="btnImport" title="导入模型文件：DAVE .dave 建模脚本（经 core/dave_import.js 解析进 Scene DAG）或本系统导出的 .json">⬆ 导入</button>
+      <input type="file" id="fileImport" accept=".dave,.json,.py" style="display:none">
     </div>
     <div id="liveresult"></div>
     <h2>场景树</h2>
@@ -89,7 +91,7 @@ window.addEventListener('unhandledrejection', function (e) {
 <footer>
   <span>10 个验证算例全部 PASS（右侧“✔🖼 验证截图”内嵌截图）· 截图见 screenshots/ · Word 文档见 docs/ · 运行: <code>npm run verify</code> / <code>npm run serve</code> · 3D 视图可点击拾取对象</span>
 </footer>
-<script>window.__APP_VERSION="1.1.0";</script>
-<script type="module" src="./app/app.js?v=1.1.0"></script>
+<script>window.__APP_VERSION="1.3.0";</script>
+<script type="module" src="./app/app.js?v=1.3.0"></script>
 </body>
 </html>
