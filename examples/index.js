@@ -1,6 +1,6 @@
 // examples/index.js — 10 verification cases (V01..V10 style) covering lines, mooring,
 // buoys, vessels, crane lift, riser, waves/spectrum/fatigue. Each has build() + verify().
-import { Model, Scene } from '../core/scene.js';
+import { Model, Scene, Manager, dissolveNode } from '../core/scene.js';
 import { rotVecToMat3, mat3ToRotVec, mat3Mul, mat3Vec } from '../core/math.js';
 import { Line } from '../core/line.js';
 import { RigidBody6DOF, boxGZ } from '../core/vessel.js';
@@ -1621,6 +1621,74 @@ export const EXAMPLES = [
         { name: '深挖 FK·逆变换往返 (rot 误差, deg)', expected: 0, actual: backRotErr, unit: 'deg', tol: 1, absFloor: 1e-9 },
         { name: '深挖 FK·混合轴合成 父(10,-20,30)°×子(5,15,-25)° == mat3Mul 手工 (R 误差)', expected: 0, actual: mixErr, unit: '-', tol: 1, absFloor: 1e-12 },
         { name: 'FK 角度约定: parent.rot=[0,0,90] 按 90° 解析 → R≈Rz(90°)（防 90 rad 误读）', expected: 0, actual: rz90err, unit: '-', tol: 1, absFloor: 1e-12 },
+      ];
+    },
+  },
+  {
+    // DAVE docs groups.md / nodetree.rst / dissolve.md — scene node-tree architecture
+    id: 'ex33', cat: 'DAVE-nb', name: 'DAVE 节点树架构：observers 通知与级联删除、Manager 依赖排序、dissolve 保持世界位姿',
+    desc: '按 DAVE 公开文档 groups.md / nodetree.rst / dissolve.md 在 core/scene.js 落地节点树架构：SNode 层 observers（setProp 触发 on_observed_node_changed)、删除被观察节点时级联删除 observer、topoOrder 按依赖边（parent + 被观察节点 + Manager.dependsOn) 排序、Manager 管理的节点语义（managedNodes/creates/manager)、dissolveNode：dissolve 中间 Frame 时把子节点重挂到祖父并保持世界位姿（逆 FK)，附着点 Point 拒绝 dissolve。',
+    analysis: { kind: 'statics' },
+    camera: 'auto',
+    build() {
+      const m = new Model('ex33_nodetree');
+      const sc = m.scene;
+      // 3 层 frame 链（dissolve 测试用，非平凡旋转）
+      const root = sc.newFrame('root', { position: [10, 0, 5], rotation: [0, 0, 30 * Math.PI / 180] });
+      const mid = sc.newFrame('mid', { position: [2, 0, 0], rotation: [0, 20 * Math.PI / 180, 0] });
+      const leaf = sc.newFrame('leaf', { position: [1, 0, 0], rotation: [0, 0, -15 * Math.PI / 180] });
+      sc.setParent(mid, root); sc.setParent(leaf, mid);
+      // observer 对：observed 被 observer 观察
+      const observed = sc.newPoint('observed', { position: [0, 0, 0] });
+      const observer = sc.newAxis('observer', { position: [0, 0, 0] });
+      observed.addObserver(observer);
+      // manager：管理一个 point，依赖 base 必须先存在
+      const base = sc.newAxis('base', { position: [0, 0, 0] });
+      const p = sc.newPoint('managed_point', { position: [1, 1, 0] });
+      const mgr = new Manager('mgr', { position: [0, 0, 0] });
+      sc.add(mgr);
+      mgr.dependsOn = () => [base];
+      mgr.managed.push(p); p.manager = mgr;
+      // 附着 point（dissolve 应拒绝）
+      const poi = sc.newPoint('poi_attached', { position: [0, 0, 0] });
+      const circ = sc.newCircle('circ_on_poi', { position: [0.1, 0, 0] });
+      sc.setParent(circ, poi);
+      m.meta = { sc, root, mid, leaf, observed, observer, base, mgr, p, poi, circ };
+      return m;
+    },
+    verify(model, ctx) {
+      const { sc, root, mid, leaf, observed, observer, base, mgr, p, poi } = model.meta;
+      // 1) observer 通知
+      observed.setProp('some_prop', 42);
+      const notified = observer.observedChanges.length === 1 && observer.observedChanges[0] === 'observed' && observed.props.some_prop === 42;
+      // 2) 依赖感知 topo 排序（在任何删除前）
+      const order = sc.topoOrder().map(n => n.name);
+      const topoOK = order.indexOf('observed') < order.indexOf('observer')
+        && order.indexOf('base') < order.indexOf('mgr')
+        && order.indexOf('root') < order.indexOf('mid') && order.indexOf('mid') < order.indexOf('leaf');
+      // 3) Manager 语义
+      const mgrOK = mgr.managedNodes().includes(p) && mgr.creates(p) && !mgr.creates(base) && p.manager === mgr;
+      // 4) dissolve 中间 frame：先记录 leaf 世界位姿
+      const before = sc.worldTransform(leaf);
+      dissolveNode(sc, 'mid');
+      const after = sc.worldTransform(leaf);
+      const dPos = Math.max(...before.pos.map((v, i) => Math.abs(v - after.pos[i])));
+      const dR = Math.max(...before.R.map((v, i) => Math.abs(v - after.R[i])));
+      const reparentOK = leaf.parent === root && sc.get('mid') === undefined;
+      // 5) 附着 Point 的 dissolve 被拒绝
+      let refused = false;
+      try { dissolveNode(sc, 'poi_attached'); } catch (e) { refused = /无附着/.test(e.message); }
+      // 6) 删除被观察节点 → observer 级联删除
+      sc.remove('observed');
+      const cascadeOK = sc.get('observed') === undefined && sc.get('observer') === undefined;
+      return [
+        { name: 'observer: setProp 触发 on_observed_node_changed(observed)', expected: 1, actual: notified ? 1 : 0, unit: '-', tol: 0, pass: notified },
+        { name: 'topoOrder 依赖排序: observed<observer, base<mgr, root<mid<leaf', expected: 1, actual: topoOK ? 1 : 0, unit: '-', tol: 0, pass: topoOK },
+        { name: 'Manager 语义: managedNodes/creates/manager 反引', expected: 1, actual: mgrOK ? 1 : 0, unit: '-', tol: 0, pass: mgrOK },
+        { name: 'dissolve 中间 frame 后 leaf 世界 pos 不变', expected: 0, actual: dPos, unit: 'm', tol: 1, absFloor: 1e-12 },
+        { name: 'dissolve 中间 frame 后 leaf 世界 R 不变 + 重挂 root 且 mid 被删', expected: 0, actual: reparentOK ? dR : 999, unit: '-', tol: 1, absFloor: 1e-12 },
+        { name: '附着 Point 的 dissolve 被拒绝（DAVE: nothing attached）', expected: 1, actual: refused ? 1 : 0, unit: '-', tol: 0, pass: refused },
+        { name: '删除被观察节点 → observer 级联删除', expected: 1, actual: cascadeOK ? 1 : 0, unit: '-', tol: 0, pass: cascadeOK },
       ];
     },
   },

@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T05:47:36.330Z
+生成时间: 2026-11-03T07:53:13.608Z
 
 总体: **全部 PASS**
 
@@ -38,6 +38,7 @@
 | ex30 | DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5) | 0.0e+0 | - | ✅ PASS |
 | ex31 | DAVEcore 核心功能复现对照：求解器/DAG/水静力/舱柜/悬链接触/节点工厂/状态同步 + pymeshup 式水线切片 | 1.5e+2 | - | ✅ PASS |
 | ex32 | DAVE 核心概念与术语：units(mT/kN/deg)、节点类型注册、frame 正向运动学、rotation vector/tilt/heading、inertia_radii | 0.0e+0 | - | ✅ PASS |
+| ex33 | DAVE 节点树架构：observers 通知与级联删除、Manager 依赖排序、dissolve 保持世界位姿 | 0.0e+0 | - | ✅ PASS |
 
 ## 详细校核项
 
@@ -538,4 +539,20 @@ core/concepts.js 复现 DAVE 核心概念术语：DAVE 单位制（m/mT/kN/kN·m
 | FK 角度约定: parent.rot=[0,0,90] 按 90° 解析 → R≈Rz(90°)（防 90 rad 误读） | 0.0000 | 6.123e-17 | - | 1.0000 | PASS |
 
 截图: ![ex32](screenshots/ex32.png)
+
+### ex33 DAVE 节点树架构：observers 通知与级联删除、Manager 依赖排序、dissolve 保持世界位姿
+
+按 DAVE 公开文档 groups.md / nodetree.rst / dissolve.md 在 core/scene.js 落地节点树架构：SNode 层 observers（setProp 触发 on_observed_node_changed)、删除被观察节点时级联删除 observer、topoOrder 按依赖边（parent + 被观察节点 + Manager.dependsOn) 排序、Manager 管理的节点语义（managedNodes/creates/manager)、dissolveNode：dissolve 中间 Frame 时把子节点重挂到祖父并保持世界位姿（逆 FK)，附着点 Point 拒绝 dissolve。
+
+| 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
+|---|---|---|---|---|---|
+| observer: setProp 触发 on_observed_node_changed(observed) | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| topoOrder 依赖排序: observed<observer, base<mgr, root<mid<leaf | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| Manager 语义: managedNodes/creates/manager 反引 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| dissolve 中间 frame 后 leaf 世界 pos 不变 | 0.0000 | 0.0000 | m | 1.0000 | PASS |
+| dissolve 中间 frame 后 leaf 世界 R 不变 + 重挂 root 且 mid 被删 | 0.0000 | 1.110e-16 | - | 1.0000 | PASS |
+| 附着 Point 的 dissolve 被拒绝（DAVE: nothing attached） | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| 删除被观察节点 → observer 级联删除 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+
+截图: ![ex33](screenshots/ex33.png)
 

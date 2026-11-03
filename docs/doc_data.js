@@ -197,8 +197,21 @@ export const DOC_SECTIONS = [
       { t: 'p', s: 'ex32 演示场景（父子 Frame A/B + 网格浮筒）验证 frameWorld 正向运动学（点 (2,0,0) 绕父 frame z 轴 30° 后世界坐标 (11.7321, 1, 5)）、旋转合成（Rz30∘Rz30 → 60°)、heading/tilt 提取、units 换算（12300 mT=1.23e7 kg，10 kN=1e4 N，90°=π/2)、转动惯量 I=r²·m，末了对演示场景跑 computeStatics 收敛校核——22/22 PASS。' },
       ]},
     ]},
+  {
+    id: 'nodetree', title: '6A.7 DAVE 节点树架构：observers / managers / dissolve（core/scene.js)', children: [
+      { h: '6A.7 节点树架构（groups.md / nodetree.rst / dissolve.md)', level: 2, body: [
+      { t: 'p', s: '按 DAVE 公开文档 groups.md、nodetree.rst、dissolve.md，在 core/scene.js 的 SNode/Scene 层落地（ex33 校验，7/7 PASS):' },
+      { t: 'table', cols: ['DAVE 概念', 'DAVE 定义', '本仓库实现'], rows: [
+        ['Observers（观察者）', 'A 观察 B：B 的可设属性变化时，A 收到 on_observed_node_changed；观察者 DEPENDS ON 被观察者；删除被观察节点时观察者一并删除', 'SNode.observers / observing；setProp 触发通知；Scene.remove 级联删除 observer；topoOrder 把被观察节点排在观察者之前'],
+        ['Managers（管理器）', 'Manager 管理一组标准化节点（如 shackle/sling)：managed_nodes、depends_on（创建前必须存在的节点）、creates(node)、delete', 'Manager extends SNode：managedNodes() / dependsOn() / creates() / delete()；p.manager 反引；topoOrder 中 dependsOn 节点排在 manager 之前'],
+        ['Dependency-aware topo sort', '节点按依赖排序（parent、观察关系、manager 依赖），避免循环引用', 'Scene.topoOrder() 走 dependencyNodes()（parent + observing + dependsOn)'],
+        ['Dissolve（溶解）', '不改变模型几何地移除节点：中间 Frame dissolve = 子节点重挂到祖父且保持世界位姿；Point 只有无附着时可 dissolve', 'dissolveNode(scene, name)：用逆 FK（worldToLocal 语义）重算子节点 local pos/rot，误差 < 1e-12；附着 Point 抛错拒绝'],
+        ['Node tree 拖拽规则（nodetree.rst)', '拖拽改 parent 关系；Circle-Circle 建 geometric contact 等', 'setParent + Hinge/GeometricContact 元件（ex13 已验证销孔连接）'],
+      ]},
+      ]},
+    ]},
     {
-    id: 'examples', title: '8. 验证算例（32 个，全部 PASS)', children: [
+    id: 'examples', title: '8. 验证算例（33 个，全部 PASS)', children: [
       { h: '8.1 算例清单', level: 2, body: [
         { t: 'ul', items: [
           'ex01 空中弹性悬链线 vs 解析解（端部张力/垂深）',
@@ -233,6 +246,7 @@ export const DOC_SECTIONS = [
           'ex30 DAVE-notebooks "10 Buoayncy and Stability/Carene Table"：core/marine.js 复刻 DAVE marine.carene_table（delta_draft=1e-3、delta_roll=1°、delta_pitch=0.3° 有限差分），吃水 0.25–9 m 共 19 行，V/CoB/CoF 与 DAVE 一致，14/14 PASS',
           'ex31 DAVEcore 核心功能复现对照（core/davecore.js)：7 组 DAVEcore 功能全部落地——求解器/DAG 正向运动学/trimesh 水静力/Tank 破损舱（free_flooding+permeability+cog_when_full)/悬链线与接触（新增 ContactMesh 立体角判内）/HydSpring+SPMT 等节点工厂/state_update；另用 pymeshup 式水线切片 waterplaneProps 独立交叉校验 carene（Awl/CoF/BM T=I_T/V=26.709 与 DAVE 表 26.7018 一致)，15/15 PASS',
           'ex32 DAVE 核心概念与术语（core/concepts.js)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学（单级 frameWorld + 多级链 frameChainWorld + 逆 worldToLocal + pointWorld，与 Scene DAG worldTransform 交叉验证）、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量，演示场景静力收敛（frameWorld 双方 rot 均为 deg)，22/22 PASS',
+          'ex33 DAVE 节点树架构（groups.md/nodetree.rst/dissolve.md)：observers 通知与级联删除、Manager 依赖感知 topo 排序、dissolve 中间 Frame 保持子节点世界位姿（逆 FK 误差<1e-12)、附着 Point 拒绝 dissolve，7/7 PASS',
         ] },
         { t: 'p', s: '每个算例由 tools/run_examples.mjs 自动运行并做程序化 PASS/FAIL 校核，同时渲染 1280×800 截图存入 screenshots/，结果写入 app/verification_data.js 与 docs/verification_report.{md,html}，可在 App 的“验证”页卡查看。' },
       ] },
@@ -241,7 +255,7 @@ export const DOC_SECTIONS = [
   {
     id: 'usage', title: '9. 使用指南', children: [
       { h: '9.1 本地运行', level: 2, body: [
-        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 32 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
+        { t: 'code', s: 'git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 33 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html' },
         { t: 'p', s: 'App 完全离线运行：3D 视图、算例仿真、验证表、文档、流程图、下载面板均为本地模块，无任何外部请求。' },
         { t: 'ul', items: ['3D 视图可点击拾取对象（船体/缆节点/POI)，左侧场景树同步高亮；无 WebGL 时自动回退显示软件渲染截图', '左侧面板：场景树(Scene DAG)、属性检查器(实时 q/张力/残差)、环境滑杆(波高/周期/波向/海流/风速)、绞车 L0 滑杆', '导入/导出：⬆ 导入 .dave/.py/JSON 模型文件（.dave 经 core/dave_import.js 进 Scene DAG)，⬇ 导出模型 JSON(DAVE 式)/OrcaFlex YAML/DAVE py/当前画面 PNG；URL 参数 ?ex=ex07 直达算例', '“🧪 重跑校核”按钮在浏览器内以与 runner 相同的参数重跑该算例全部校核项并显示 PASS/FAIL', '底部时序图图例可点击显示/隐藏对应通道；播放支持 0.25–4× 速度与时间 scrubber'] },
       ] },
@@ -249,7 +263,7 @@ export const DOC_SECTIONS = [
         { t: 'code', s: 'pip install python-docx pillow reportlab fonttools brotli\nnpm run docs           # tools/build_docs.py → docs/OrcaFlex_DAVE_实现文档.docx（分级标题 + 流程图 PNG)\nnpm run docs:pdf       # tools/build_pdf.py  → docs/OrcaFlex_DAVE_实现文档.pdf（同源数据的 PDF 副本，内嵌 NotoSansSC 中文字体）' },
       ] },
       { h: '9.3 目录结构', level: 2, body: [
-        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 32 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照 + ex32 DAVE 核心概念与术语，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
+        { t: 'ul', items: ['core/ — 数值库与场景图', 'examples/ — 33 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照 + ex32 DAVE 核心概念与术语 + ex33 节点树架构，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）', 'tools/ — 验证/截图/文档构建脚本', 'app/ — Web App (index.html + app/)', 'docs/ — 文档数据、验证报告、docx', 'screenshots/ — 各算例渲染截图', 'vendor/ — three.js 本地依赖'] },
       ] },
     ],
   },

@@ -1,7 +1,7 @@
 // core/scene.js — DAVE-style Scene & Node DAG (clean-room, API-compatible in spirit)
 // A Scene is a collection of nodes. A node has a parent, a local position/rotation,
 // and type-specific properties. World transform = compose parent chain.
-import { v3, rotVecToMat3, mat3Vec, mat3Mul } from './math.js';
+import { v3, rotVecToMat3, mat3ToRotVec, mat3Vec, mat3Mul, mat3T } from './math.js';
 
 let NODE_ID = 1;
 
@@ -17,6 +17,32 @@ export class SNode {
     this.children = [];
     this.dofs = props.dofs || [true, true, true, true, true, true]; // for Frame-like
     this.fixed = props.fixed || false;
+    // DAVE groups.md: observers & managers (implemented at Node level for every node type)
+    this.observers = [];   // nodes observing THIS node (they depend on this node)
+    this.observing = [];   // nodes THIS node observes (this node depends on them)
+    this.manager = null;   // Manager node managing this node, or null
+    this.observedChanges = []; // log of on_observed_node_changed callbacks (for tests/reports)
+  }
+  // settable-property hook: DAVE @node_setter_observable -> notify all observers
+  setProp(name, value) {
+    this.props[name] = value;
+    for (const o of [...this.observers]) o.onObservedNodeChanged(this);
+  }
+  onObservedNodeChanged(changedNode) {
+    this.observedChanges.push(changedNode.name);
+  }
+  addObserver(observer) {
+    if (!this.observers.includes(observer)) this.observers.push(observer);
+    if (observer.observing && !observer.observing.includes(this)) observer.observing.push(this);
+  }
+  // dependency edges used by topoOrder: parent first, nodes this node observes before it,
+  // manager depends_on() nodes before the manager (DAVE groups.md)
+  dependencyNodes() {
+    const deps = [];
+    if (this.parent) deps.push(this.parent);
+    deps.push(...(this.observing || []));
+    if (typeof this.dependsOn === 'function') deps.push(...this.dependsOn());
+    return deps;
   }
   toJSON() {
     return {
@@ -38,9 +64,12 @@ export class Scene {
   remove(name) {
     const n = this.nodes.get(name);
     if (!n) return;
+    // DAVE groups.md: when a node is deleted, any node observing it is deleted as well
+    const cascading = n.observers.filter(o => this.nodes.has(o.name)); // nodes observing n get deleted too
     for (const c of [...n.children]) c.parent = null;
     if (n.parent) n.parent.children = n.parent.children.filter(c => c !== n);
     this.nodes.delete(name);
+    for (const o of cascading) this.remove(o.name);
   }
   setParent(child, parent) {
     if (child.parent) child.parent.children = child.parent.children.filter(c => c !== child);
@@ -78,7 +107,11 @@ export class Scene {
   worldPosition(node) { return this.worldTransform(node).pos; }
   topoOrder() {
     const out = []; const seen = new Set();
-    const visit = (n) => { if (seen.has(n.id)) return; seen.add(n.id); if (n.parent) visit(n.parent); out.push(n); };
+    const visit = (n) => {
+      if (seen.has(n.id)) return; seen.add(n.id);
+      for (const d of n.dependencyNodes()) visit(d);
+      out.push(n);
+    };
     for (const n of this.nodes.values()) visit(n);
     return out;
   }
@@ -98,6 +131,41 @@ export class Scene {
     }
     return s;
   }
+}
+
+// DAVE groups.md "Manager": manages a standardized group of nodes (e.g. shackle/sling).
+export class Manager extends SNode {
+  constructor(name, props = {}) {
+    super('Manager', name, props);
+    this.managed = []; // managed nodes
+  }
+  managedNodes() { return this.managed; }
+  dependsOn() { return []; }              // nodes that must exist before this manager (override)
+  creates(node) { return this.managed.includes(node); } // managed nodes need no separate export
+  delete() { for (const n of [...this.managed]) { n.manager = null; } this.managed = []; }
+}
+
+// DAVE dissolve.md: remove a node without changing the model's world geometry.
+// An intermediate Frame is dissolved by re-attaching its children to its parent while
+// PRESERVING their world transforms (inverse FK). A Point can only be dissolved when
+// nothing is attached to it.
+export function dissolveNode(scene, name) {
+  const n = scene.get(name);
+  if (!n) throw new Error('dissolveNode: no such node ' + name);
+  if (n.type === 'Point' && n.children.length > 0)
+    throw new Error('dissolveNode: Point 只能在无附着时 dissolve (children=' + n.children.length + ')');
+  if (n.type === 'Manager') n.delete();
+  const parent = n.parent;
+  const pw = parent ? scene.worldTransform(parent) : { pos: [0, 0, 0], R: rotVecToMat3([0, 0, 0]) };
+  const pRt = mat3T(pw.R);
+  for (const c of [...n.children]) {
+    const cw = scene.worldTransform(c);
+    c.position = mat3Vec(pRt, cw.pos.map((v, i) => v - pw.pos[i]));   // world -> new local pos
+    c.rotation = mat3ToRotVec(mat3Mul(pRt, cw.R));                     // world -> new local rot (rad, SNode convention)
+    scene.setParent(c, parent);
+  }
+  scene.remove(name);
+  return true;
 }
 
 // ---------------- Model: scene + environment + analysis objects ----------------

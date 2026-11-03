@@ -546,8 +546,59 @@
    ]
   },
   {
+   "id": "nodetree",
+   "title": "6A.7 DAVE 节点树架构：observers / managers / dissolve（core/scene.js)",
+   "children": [
+    {
+     "h": "6A.7 节点树架构（groups.md / nodetree.rst / dissolve.md)",
+     "level": 2,
+     "body": [
+      {
+       "t": "p",
+       "s": "按 DAVE 公开文档 groups.md、nodetree.rst、dissolve.md，在 core/scene.js 的 SNode/Scene 层落地（ex33 校验，7/7 PASS):"
+      },
+      {
+       "t": "table",
+       "cols": [
+        "DAVE 概念",
+        "DAVE 定义",
+        "本仓库实现"
+       ],
+       "rows": [
+        [
+         "Observers（观察者）",
+         "A 观察 B：B 的可设属性变化时，A 收到 on_observed_node_changed；观察者 DEPENDS ON 被观察者；删除被观察节点时观察者一并删除",
+         "SNode.observers / observing；setProp 触发通知；Scene.remove 级联删除 observer；topoOrder 把被观察节点排在观察者之前"
+        ],
+        [
+         "Managers（管理器）",
+         "Manager 管理一组标准化节点（如 shackle/sling)：managed_nodes、depends_on（创建前必须存在的节点）、creates(node)、delete",
+         "Manager extends SNode：managedNodes() / dependsOn() / creates() / delete()；p.manager 反引；topoOrder 中 dependsOn 节点排在 manager 之前"
+        ],
+        [
+         "Dependency-aware topo sort",
+         "节点按依赖排序（parent、观察关系、manager 依赖），避免循环引用",
+         "Scene.topoOrder() 走 dependencyNodes()（parent + observing + dependsOn)"
+        ],
+        [
+         "Dissolve（溶解）",
+         "不改变模型几何地移除节点：中间 Frame dissolve = 子节点重挂到祖父且保持世界位姿；Point 只有无附着时可 dissolve",
+         "dissolveNode(scene, name)：用逆 FK（worldToLocal 语义）重算子节点 local pos/rot，误差 < 1e-12；附着 Point 抛错拒绝"
+        ],
+        [
+         "Node tree 拖拽规则（nodetree.rst)",
+         "拖拽改 parent 关系；Circle-Circle 建 geometric contact 等",
+         "setParent + Hinge/GeometricContact 元件（ex13 已验证销孔连接）"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "examples",
-   "title": "8. 验证算例（32 个，全部 PASS)",
+   "title": "8. 验证算例（33 个，全部 PASS)",
    "children": [
     {
      "h": "8.1 算例清单",
@@ -587,7 +638,8 @@
         "ex29 DAVE-notebooks \"04 Reporting/Reporting node properties\"：直接导入 DAVE 官方 cheetah.dave（网格浮力 buoyancy cheetah.obj + 24 个 STL 压载罐 + 船体 visual 网格），print_node_tree 与 notebook 输出逐行一致，solve_statics 收敛（残差 8e-9)，report() 支持 */? 通配符，6.75 m 吃水排水量 53278 m³（DAVE 标注 53290.760)，15/15 PASS",
         "ex30 DAVE-notebooks \"10 Buoayncy and Stability/Carene Table\"：core/marine.js 复刻 DAVE marine.carene_table（delta_draft=1e-3、delta_roll=1°、delta_pitch=0.3° 有限差分），吃水 0.25–9 m 共 19 行，V/CoB/CoF 与 DAVE 一致，14/14 PASS",
         "ex31 DAVEcore 核心功能复现对照（core/davecore.js)：7 组 DAVEcore 功能全部落地——求解器/DAG 正向运动学/trimesh 水静力/Tank 破损舱（free_flooding+permeability+cog_when_full)/悬链线与接触（新增 ContactMesh 立体角判内）/HydSpring+SPMT 等节点工厂/state_update；另用 pymeshup 式水线切片 waterplaneProps 独立交叉校验 carene（Awl/CoF/BM T=I_T/V=26.709 与 DAVE 表 26.7018 一致)，15/15 PASS",
-        "ex32 DAVE 核心概念与术语（core/concepts.js)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学（单级 frameWorld + 多级链 frameChainWorld + 逆 worldToLocal + pointWorld，与 Scene DAG worldTransform 交叉验证）、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量，演示场景静力收敛（frameWorld 双方 rot 均为 deg)，22/22 PASS"
+        "ex32 DAVE 核心概念与术语（core/concepts.js)：units(mT/kN/deg ↔ SI)、25 类节点类型注册 NODE_TYPES、frame 正向运动学（单级 frameWorld + 多级链 frameChainWorld + 逆 worldToLocal + pointWorld，与 Scene DAG worldTransform 交叉验证）、rotation vector 与 heading/tilt_x/tilt_y、I=r²·m 转动惯量，演示场景静力收敛（frameWorld 双方 rot 均为 deg)，22/22 PASS",
+        "ex33 DAVE 节点树架构（groups.md/nodetree.rst/dissolve.md)：observers 通知与级联删除、Manager 依赖感知 topo 排序、dissolve 中间 Frame 保持子节点世界位姿（逆 FK 误差<1e-12)、附着 Point 拒绝 dissolve，7/7 PASS"
        ]
       },
       {
@@ -608,7 +660,7 @@
      "body": [
       {
        "t": "code",
-       "s": "git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 32 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html"
+       "s": "git clone <repo> && cd webgpufem\nnpm install            # three + pngjs\nnpm run verify         # 运行全部 33 个算例的程序化验证 + 截图\nnpm run serve          # 本地启动 http://localhost:8000 打开 index.html"
       },
       {
        "t": "p",
@@ -644,7 +696,7 @@
        "t": "ul",
        "items": [
         "core/ — 数值库与场景图",
-        "examples/ — 32 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照 + ex32 DAVE 核心概念与术语，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）",
+        "examples/ — 33 个验证算例（ex01–ex10 原创 + ex28 网格几何 + ex11–ex16 DAVE 移植 + ex17–ex27、ex29/ex30 DAVE-notebooks 复现 + ex31 DAVEcore 功能对照 + ex32 DAVE 核心概念与术语 + ex33 节点树架构，ex22/ex23/ex29/ex30 由 examples/assets/*.dave 导入构建）",
         "tools/ — 验证/截图/文档构建脚本",
         "app/ — Web App (index.html + app/)",
         "docs/ — 文档数据、验证报告、docx",
