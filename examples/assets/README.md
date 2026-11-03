@@ -8,3 +8,10 @@ They are used here as *import fixtures* for the clean-room `.dave` importer
 DAVE binary is decompiled or linked. The companion `*.dave.js` modules are mechanical
 `export default <json-stringified text>` wrappers so the browser app can import the
 same text without fetch.
+
+`cheetah.dave`, `cheetah_buoyancy.obj.js` (`cheetah/buoyancy cheetah.obj`),
+`cheetah_visual.obj.js` (`cheetah/visual vessel cheetah.obj`) and `cheetah_tanks.stl.js`
+(`cheetah/tanks/*.stl`, binary STL as base64) are likewise copied verbatim from the DAVE
+repository (`src/DAVE/resources/cheetah*`), MPL-2.0. Used as import fixtures for
+ex29/ex30 (DAVE-notebooks "04 Reporting/Reporting node properties" and
+"10 Buoayncy and Stability/Carene Table", which both run on `cheetah.dave`).

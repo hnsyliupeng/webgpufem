@@ -105,9 +105,9 @@ export function renderPNG(scene, opts = {}) {
     const diff = Math.abs(v3.dot(n3, L));
     const spec = Math.pow(Math.max(0, v3.dot(n3, Hv)), 28) * 90;
     let c = [
-      base[0] * (0.36 + 0.64 * diff) + spec,
-      base[1] * (0.36 + 0.64 * diff) + spec,
-      base[2] * (0.36 + 0.64 * diff) + spec,
+      base[0] * (0.44 + 0.56 * diff) + spec,
+      base[1] * (0.44 + 0.56 * diff) + spec,
+      base[2] * (0.44 + 0.56 * diff) + spec,
     ];
     c = applyFog(c, z);
     return c.map(v => Math.max(0, Math.min(255, Math.round(v))));
@@ -232,8 +232,12 @@ export function renderPNG(scene, opts = {}) {
   // bodies (mesh triangles or shaded boxes or buoy discs)
   for (const b of scene.bodies) {
     if (b.meshTris) {
-      const base = b.type === 'Vessel' ? [110, 160, 240] : [224, 175, 104];
-      for (const t of b.meshTris) tri(t[0], t[1], t[2], base, 0.97, true);
+      const nTri = b.meshTris.length;
+      // dense real-world meshes (ships): light hull color, no per-triangle edges (too dense);
+      // coarse primitive meshes: colored + edge outlines
+      const dense = nTri > 4000;
+      const base = b.color || (dense ? [198, 206, 219] : b.type === 'Vessel' ? [110, 160, 240] : [224, 175, 104]);
+      for (const t of b.meshTris) tri(t[0], t[1], t[2], base, 0.97, !dense);
       continue;
     }
     const isBox = b.hydro === 'box' && b.L && b.B;

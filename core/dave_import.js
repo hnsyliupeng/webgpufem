@@ -22,7 +22,7 @@ import { Model } from './scene.js';
 import { RigidBody6DOF } from './vessel.js';
 import { Line } from './line.js';
 import { Hinge, Connector2d, LinCon6, Tank, BallastSystem, BuoyancyBox, BuoyancyMesh, Spring } from './elements.js';
-import { parseObj, transformMesh, meshBBox, meshMassProps } from './mesh.js';
+import { parseObj, parseStlBase64, transformMesh, meshBBox, meshMassProps } from './mesh.js';
 import { rotVecToMat3, mat3Vec } from './math.js';
 import { G } from './waves.js';
 
@@ -47,8 +47,13 @@ function pyToJs(src) {
     calls.push(name);
     return `\x00C${calls.length - 1}\x00(`;
   });
+  // list comprehensions: [expr for v in iter] -> __compr(iter, 'v', (expr))  (call-protected so convertTuples leaves it alone)
+  src = src.replace(/\[([^\[\]]+?)\s+for\s+([A-Za-z_$][\w$]*)\s+in\s+([^\[\]]+?)\]/g,
+    (m, expr, v, iter) => { calls.push('__compr'); const q = String(expr).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); return `\x00C${calls.length - 1}\x00(${iter}, '${v}', '${q}')`; });
   // tuples -> arrays via recursive balanced-paren scan (call parens are protected)
   src = convertTuples(src);
+  // starred elements in array/tuple literals: [*a, *b, c] -> [...a, ...b, c]
+  src = src.replace(/([\[,]\s*)\*\s*/g, '$1...');
   // restore calls / strings
   src = src.replace(/\x00C(\d+)\x00\(/g, (m, i) => calls[+i] + '(');
   src = src.replace(/\x00S(\d+)\x00/g, (m, i) => strings[+i]);
@@ -154,6 +159,11 @@ function logicalLines(src) {
 
 // ---------- interpreter ----------
 function execDave(src, scope) {
+  scope.__compr = (iter, v, src) => {
+    const arr = Array.isArray(iter) ? iter : [];
+    const fn = new Function(v, `return (${src});`);
+    return arr.map(x => fn(x));
+  };
   const lines = logicalLines(src).map(l => ({ indent: l.match(/^[ \t]*/)[0].length, text: l.trim() }));
   function evalExpr(expr, sc) {
     const js = kwargsToObj(pyToJs(expr));
@@ -186,7 +196,15 @@ function execDave(src, scope) {
         k = bEnd; continue;
       }
       const am = t.match(/^([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*=(?!=)([\s\S]*)$/);
-      if (am) { scope[am[1]] = evalExpr(am[2], scope); k++; continue; }
+      if (am) {
+        if (am[1].includes('.')) { // dotted assignment: obj.prop = value
+          const dot = am[1].indexOf('.');
+          const root = am[1].slice(0, dot), prop = am[1].slice(dot + 1);
+          const obj = evalExpr(root, scope);
+          if (obj && typeof obj === 'object') obj[prop] = evalExpr(am[2], scope);
+        } else scope[am[1]] = evalExpr(am[2], scope);
+        k++; continue;
+      }
       evalExpr(t, scope); k++;
     }
     return k;
@@ -200,7 +218,8 @@ function kwOf(args) {
   const plain = last && typeof last === 'object' && !Array.isArray(last) && !(last instanceof RigidBody6DOF);
   if (args.length === 1) return plain ? last : { __pos: args };
   if (plain && args.length >= 2) {
-    const pos = args.slice(0, -1);
+    let pos = args.slice(0, -1);
+    if (pos.length === 1 && Array.isArray(pos[0])) pos = pos[0]; // ([('name')], {kw}) -> ['name']
     const kw = { ...last, __pos: pos };
     if (kw.name === undefined && typeof pos[0] === 'string') kw.name = pos[0];
     return kw;
@@ -242,7 +261,18 @@ export function loadDaveModel(daveText, opts = {}) {
   }
   function attByRef(v) {
     if (!v) return null;
-    if (typeof v === 'string') { const e = byName[v]; return e ? e.ref : null; }
+    if (typeof v === 'string') {
+      const e = byName[v];
+      if (!e) return null;
+      if (e.kind === 'att') return e.ref;
+      // frame chained to a parent body: the attachment acts on the parent at the frame's local position
+      const sn = sceneNodes[v];
+      if (sn && sn.parent && byName[sn.parent.name] && byName[sn.parent.name].kind === 'body') {
+        const lp = (sn.props && sn.props.position) || [0, 0, 0];
+        return { type: 'vessel', body: byName[sn.parent.name].ref, localPoint: [...lp] };
+      }
+      return { type: 'vessel', body: e.ref, localPoint: [0, 0, 0] };
+    }
     if (v.type === 'vessel' || v.type === 'fixed') return v;
     if (v instanceof RigidBody6DOF) return { type: 'vessel', body: v, localPoint: [0, 0, 0] };
     return null;
@@ -261,9 +291,13 @@ export function loadDaveModel(daveText, opts = {}) {
     get_resource_path: (p) => p,
     new_frame(...args) {
       const kw = kwOf(args);
+      const fparent = bodyByRef(kw.parent);
+      const fpos = fparent && kw.position
+        ? mat3Vec(rotVecToMat3(fparent.rot), kw.position).map((x, i) => x + fparent.pos[i])
+        : [...(kw.position || [0, 0, 0])];
       const b = new RigidBody6DOF({
         name: kw.name, type: 'Frame', mass: 1e-6, cog: [0, 0, 0], inertia: [1e-6, 1e-6, 1e-6],
-        pos: [...(kw.position || [0, 0, 0])], rot: (kw.rotation || [0, 0, 0]).map(v => v * DG),
+        pos: fpos, rot: (kw.rotation || [0, 0, 0]).map(v => v * DG),
         hydro: null, addedMass: [0, 0, 0, 0, 0, 0],
         fixed: kw.fixed === true ? [true, true, true, true, true, true] : (kw.fixed || [true, true, true, true, true, true]),
       });
@@ -409,8 +443,11 @@ export function loadDaveModel(daveText, opts = {}) {
       const kw = kwOf(args);
       const parent = bodyByRef(kw.parent);
       const bs = new BallastSystem({ name: kw.name || 'Ballast', tanks: [] });
+      bs.tanks.append = (x) => bs.tanks.push(x); // python-style list.append
       model.meta.ballastSystem = bs;
+      model.meta.ballastParent = parent;
       return {
+        tanks: bs.tanks,
         new_tank(...targs) {
           const tkw = kwOf(targs);
           const name = tkw.name ?? tkw.__pos?.[0];
@@ -430,6 +467,21 @@ export function loadDaveModel(daveText, opts = {}) {
       const parent = bodyByRef(kw.parent);
       const V = kw.volume ?? (kw.capacity ? Math.abs(kw.capacity) / (1.025 * G) : 100);
       const t = new Tank({ name: kw.name, body: parent, V, fill: kw.fill ?? 0, rho, cog: [...(kw.cog || kw.position || [0, 0, 0])] });
+      // DAVE Tank has a trimesh: t.trimesh.load_file('....stl', scale=, rotation=, offset=) sets the real tank volume/cog
+      t.trimesh = {
+        load_file(...fargs) {
+          const fkw = kwOf(fargs);
+          const path = String(fkw.path ?? fkw.__pos?.[0] ?? '').replace(/\\/g, '/').split('/').pop();
+          const raw = resolveAsset(path);
+          if (!raw) return;
+          const mesh = /^b64:/.test(raw)
+            ? transformMesh(parseStlBase64(raw.slice(4)), { scale: fkw.scale || [1, 1, 1], rotation: fkw.rotation || [0, 0, 0], offset: fkw.offset || [0, 0, 0] })
+            : transformMesh(parseObj(raw), { scale: fkw.scale || [1, 1, 1], rotation: fkw.rotation || [0, 0, 0], offset: fkw.offset || [0, 0, 0] });
+          const mp = meshMassProps(mesh, 1);
+          t.V = mp.V; t.localCog = mp.c; t.mesh = mesh; t.tris = mesh.tri.length;
+          return t;
+        },
+      };
       model.addElement(t);
       return t;
     },
@@ -442,12 +494,12 @@ export function loadDaveModel(daveText, opts = {}) {
         parent.mesh = transformMesh(parseObj(objText), { scale: kw.scale || [1, 1, 1], rotation: kw.rotation || [0, 0, 0], offset: kw.offset || [0, 0, 0] });
         meshAttached = true;
       }
-      model.meta.visuals.push({ name: kw.name, path: kw.path, mesh: meshAttached });
+      model.meta.visuals.push({ name: kw.name, path: kw.path, mesh: meshAttached, parent: kw.parent, kind: 'visual' });
       return {};
     },
     new_waveinteraction(...args) {
       const kw = kwOf(args);
-      model.meta.visuals.push({ name: kw.name, path: kw.path, note: 'dhyd coefficients not simulated (linear box hydrostatics used)' });
+      model.meta.visuals.push({ name: kw.name, path: kw.path, parent: kw.parent, kind: 'wave', note: 'dhyd coefficients not simulated (linear box hydrostatics used)' });
       return {};
     },
   };

@@ -14,8 +14,19 @@ import SNAKE15_DAVE from './assets/Snake15.dave.js';
 import BARGE_DAVE from './assets/100x30x8_barge.dave.js';
 import CUBE_OBJ from './assets/cube.obj.js';
 import BARGE_OBJ from './assets/barge.obj.js';
+import CHEETAH_DAVE from './assets/cheetah.dave.js';
+import CHEETAH_BUOY_OBJ from './assets/cheetah_buoyancy.obj.js';
+import CHEETAH_VISUAL_OBJ from './assets/cheetah_visual.obj.js';
+import CHEETAH_TANKS from './assets/cheetah_tanks.stl.js';
+import { careneTable, linearizedBuoyancyProps } from '../core/marine.js';
+import { reportNode, printNodeTree, matchWildcard } from '../core/report.js';
 import { parseObj, transformMesh, meshMassProps, clipMeshBelowPlane, boxMesh, cylinderMesh, pyramidMesh } from '../core/mesh.js';
-const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ, 'barge.obj': BARGE_OBJ };
+const DAVE_ASSETS = { 'cube.obj': CUBE_OBJ, 'barge.obj': BARGE_OBJ, 'buoyancy cheetah.obj': CHEETAH_BUOY_OBJ, 'visual vessel cheetah.obj': CHEETAH_VISUAL_OBJ };
+for (const [k, v] of Object.entries(CHEETAH_TANKS)) DAVE_ASSETS[k] = 'b64:' + v; // binary STL tanks
+
+function loadCheetah(name) {
+  return loadDaveModel(CHEETAH_DAVE, { name, resolveAsset: (n) => DAVE_ASSETS[n] ?? null });
+}
 
 
 // solve the catenary parameter a from a*sinh(halfSpan/a) = halfLen (bisection)
@@ -1280,6 +1291,121 @@ export const EXAMPLES = [
         { name: '−5°纵倾回正 |pitch|', expected: 0, actual: Math.abs(body.rotVec()[1]), unit: 'rad', tol: 0.01 },
         { name: '平衡排开体积 = 500 m³', expected: 500, actual: buoy.lastV, unit: 'm^3', tol: 1e-6 },
         { name: '浮力 = 重量 = 5.0259e6 N', expected: 0.5 * RHO * 1000 * GG, actual: RHO * GG * buoy.lastV, unit: 'N', tol: 1e-6 },
+      ];
+    },
+  },
+  {
+    // DAVE-notebooks "04 Reporting / Reporting node properties.ipynb" (open-ocean.org/DAVE/DAVE-notebooks)
+    // Runs on DAVE's own cheetah.dave: print_node_tree, solve_statics, report() with wildcards.
+    id: 'ex29', cat: 'DAVE-nb', name: 'DAVE-notebooks 04 Reporting：Cheetah 节点属性报告（print_node_tree + solve_statics + report 通配符）',
+    desc: '直接导入 DAVE 官方资源 cheetah.dave（examples/assets/cheetah.dave.js，含 buoyancy cheetah.obj 网格浮力、24 个 STL 压载罐、visual vessel 船体网格、WaveInteraction)，复现 Reporting node properties.ipynb：print_node_tree 与 DAVE 输出逐行一致；BallastSystem 压载充注使吃水 6.75 m（cheetah.dave 标注 V=53290.760 m³)；solve_statics 收敛（notebook 残差 6.9e-5)；report(node, properties) 支持 * / ? 通配符（position*、*global*、position??、*force??)。',
+    analysis: { kind: 'statics' },
+    camera: { pos: [400, -200, 40], target: [100, 0, 0] }, // 与 notebook show(camera_pos=(400,-200,40), lookat=(100,0,0)) 一致
+    build() {
+      const m = loadCheetah('ex29_nb_reporting_cheetah');
+      m.meta.daveFile = 'examples/assets/cheetah.dave';
+      const cheetah = m.bodies.find(b => b.name === 'Cheetah');
+      const buoy = m.elements.find(e => e.type === 'Buoyancy');
+      const tanks = m.elements.filter(e => e.type === 'Tank');
+      // DAVE notebook 中 solve_statics 直接收敛（设计吃水 6.75 m): 用 BallastSystem 充注压载水达到
+      // cheetah.dave 标注的 6.75 m 吃水排水量 53290.760 m3 -> fill = (rho*V - m_light) / (rho * V_tanks)
+      cheetah.pos = [0, 0, -6.75]; cheetah.rot = [0, 0, 0]; cheetah.q = [0, 0, 0, 0, 0, 0];
+      refreshExternal(m, 0); buoy.apply();
+      const Vdesign = buoy.lastV;
+      const Vtot = tanks.reduce((a, t) => a + t.V, 0);
+      const fill = (RHO * Vdesign - cheetah.mass) / (RHO * Vtot);
+      for (const t of tanks) t.fill = fill;
+      m.meta.cheetah = cheetah; m.meta.buoy = buoy; m.meta.tanks = tanks; m.meta.fill = fill; m.meta.Vdesign = Vdesign;
+      return m;
+    },
+    verify(model, ctx) {
+      const { cheetah, buoy, tanks, fill, Vdesign } = model.meta;
+      const st = ctx.st;
+      const tree = printNodeTree(model);
+      const treeExpected = [
+        'Cheetah [RigidBody]',
+        ' |-> DP reference point [Axis]',
+        ' |-> buoyancy [Buoyancy]',
+        ' |-> Ballast_system [BallastSystem]',
+        ' |-> visual - vessel [Visual]',
+        ' |-> Wave Interaction draft 6.75 [WaveInteraction1]',
+        'DP setpoint for cheetah [Axis]',
+        'DP springs cheetah [LC6d]',
+      ].join('\n');
+      // wildcard semantics exactly as documented in the notebook
+      const wc = [
+        matchWildcard('position*', 'position'), matchWildcard('position*', 'position_x'),
+        matchWildcard('*global*', 'cob_global_x'), matchWildcard('position??', 'position_x'),
+        !matchWildcard('position??', 'position'), matchWildcard('*force??', 'force_x'),
+      ];
+      const rBuoy = reportNode(model, 'buoyancy', ['cob', 'displacement']);
+      const rCheetah = reportNode(model, 'Cheetah', ['*force??']);
+      const fz = rCheetah.properties.force_z ?? 0;
+      const W = cheetah.mass * 9.80665;
+      return [
+        { name: 'print_node_tree 与 DAVE notebook 输出逐行一致', expected: 1, actual: tree === treeExpected ? 1 : 0, unit: '-', tol: 0, pass: tree === treeExpected },
+        { name: '.dave 导入的压载罐数 = 24（STL 网格容量）', expected: 24, actual: tanks.length, unit: '-', tol: 0 },
+        { name: '压载罐总容量 V_tot > 0', expected: 1, actual: tanks.reduce((a, t) => a + t.V, 0) > 1000 ? 1 : 0, unit: '-', tol: 0, pass: tanks.reduce((a, t) => a + t.V, 0) > 1000 },
+        { name: '吃水 6.75 m 排水量 V = 53290.760 m³ (cheetah.dave 标注)', expected: 53290.760, actual: Vdesign, unit: 'm^3', tol: 0.001 * 53290.760 },
+        { name: '压载充注率 fill ∈ (0,1)', expected: 1, actual: fill > 0 && fill < 1 ? 1 : 0, unit: '-', tol: 0, pass: fill > 0 && fill < 1 },
+        { name: 'solve_statics 收敛 (notebook 残差 6.9e-5)', expected: 1, actual: st.converged ? 1 : 0, unit: '-', tol: 0, pass: st.converged === true },
+        { name: '静力残差', expected: 0, actual: st.residual, unit: '-', tol: 1, absFloor: 1e-2 },
+        { name: '平衡后船体 z ≈ −6.75 m（允许压载纵倾 ≤1 m)', expected: -6.75, actual: cheetah.worldOrigin()[2], unit: 'm', tol: 1.0 },
+        { name: '平衡排水量 = 总质量/ρ', expected: (cheetah.mass + RHO * tanks.reduce((a, t) => a + t.V * t.fill, 0)) / RHO, actual: buoy.lastV, unit: 'm^3', tol: 0.001 * Vdesign },
+        { name: '通配符语义 position*/*global*/position??/*force?? 全部正确', expected: 1, actual: wc.every(Boolean) ? 1 : 0, unit: '-', tol: 0, pass: wc.every(Boolean) },
+        { name: 'report(buoyancy,[cob,displacement]) 含位移', expected: 1, actual: ('displacement' in rBuoy.properties && 'cob' in rBuoy.properties) ? 1 : 0, unit: '-', tol: 0, pass: 'displacement' in rBuoy.properties && 'cob' in rBuoy.properties },
+        { name: 'report(buoyancy) 位移 = 网格切割 V', expected: buoy.lastV, actual: rBuoy.properties.displacement, unit: 'm^3', tol: 1e-6 },
+        { name: 'report(buoyancy) 浮心 z ≈ 3.5788 m (DAVE carene 表 6.75 m 行)', expected: 3.578762, actual: rBuoy.properties.cob_local ? rBuoy.properties.cob_local[2] : rBuoy.properties.cob[2] + 6.75, unit: 'm', tol: 0.01 },
+        { name: 'report(Cheetah,[*force??]) 含 force_x/y/z', expected: 1, actual: ['force_x', 'force_y', 'force_z'].every(k => k in rCheetah.properties) ? 1 : 0, unit: '-', tol: 0, pass: ['force_x', 'force_y', 'force_z'].every(k => k in rCheetah.properties) },
+        { name: '平衡后合力 Fz ≈ 0（相对重量）', expected: 0, actual: fz / W, unit: '-', tol: 0, absFloor: 0, pass: Math.abs(fz / W) < 1e-6 },
+      ];
+    },
+  },
+  {
+    // DAVE-notebooks "10 Buoayncy and Stability / Carene Table.ipynb" (open-ocean.org/DAVE/DAVE-notebooks)
+    // DAVE.marine.carene_table(s, buoyancy_node, draft_min=0.25, draft_max=9, stepsize=0.5) on cheetah.dave
+    id: 'ex30', cat: 'DAVE-nb', name: 'DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5)',
+    desc: 'core/marine.js 按 DAVE marine.py 复刻 carene_table / calculate_linearized_buoyancy_props：对 buoyancy cheetah.obj 网格在吃水 0.25..9 m（步长 0.5，共 19 行）用精确水线切割求排水量/浮心，delta_draft=1e-3 求 Awl 与漂心 CoF，绕浮心加 1° 横倾 / 0.3° 纵倾求 BM T / BM L。锚定校验：6.75 m 吃水排水量 53290.760 m³（cheetah.dave 标注）、浮心 z=3.5788 m、漂心 x=98.945 m（notebook 表）等。',
+    analysis: { kind: 'statics' },
+    camera: { pos: [420, -260, 60], target: [100, 0, 0] },
+    build() {
+      const m = loadCheetah('ex30_nb_carene_cheetah');
+      m.meta.daveFile = 'examples/assets/cheetah.dave';
+      const cheetah = m.bodies.find(b => b.name === 'Cheetah');
+      const buoy = m.elements.find(e => e.type === 'Buoyancy');
+      const tanks = m.elements.filter(e => e.type === 'Tank');
+      cheetah.pos = [0, 0, -6.75]; cheetah.rot = [0, 0, 0]; cheetah.q = [0, 0, 0, 0, 0, 0];
+      cheetah.fixed = [true, true, true, true, true, true]; // 静水力表工况：船体固定在设计吃水
+      refreshExternal(m, 0); buoy.apply();
+      const Vtot = tanks.reduce((a, t) => a + t.V, 0);
+      const fill = (RHO * buoy.lastV - cheetah.mass) / (RHO * Vtot);
+      for (const t of tanks) t.fill = fill;
+      m.meta.cheetah = cheetah; m.meta.buoy = buoy;
+      return m;
+    },
+    verify(model, ctx) {
+      const { buoy } = model.meta;
+      const rows = careneTable(buoy.mesh, { draftMin: 0.25, draftMax: 9, stepsize: 0.5, rho: RHO });
+      const at = (d) => rows.find(r => Math.abs(r['Draft [m]'] - d) < 1e-9);
+      const r25 = at(0.25), r675 = at(6.75), r9 = at(9.0);
+      // internal consistency: Awl ≈ dV/d(draft) from neighbouring rows (0.5 m apart)
+      const awl675 = (at(7.25)['Displacement [m3]'] - at(6.25)['Displacement [m3]']) / 1.0;
+      const mono = rows.every((r, i) => i === 0 || r['Displacement [m3]'] > rows[i - 1]['Displacement [m3]']);
+      return [
+        { name: 'carene 表行数 = 19（0.25..9.0 步长 0.5)', expected: 19, actual: rows.length, unit: '-', tol: 0 },
+        { name: '排水量随吃水单调增', expected: 1, actual: mono ? 1 : 0, unit: '-', tol: 0, pass: mono },
+        { name: 'V(6.75) = 53290.760 m³ (cheetah.dave 标注 DAVE 值)', expected: 53290.760, actual: r675['Displacement [m3]'], unit: 'm^3', tol: 0.001 * 53290.760 },
+        { name: 'CoB z(6.75) = 3.5788 m（notebook 表 6.75 行）', expected: 3.578762, actual: r675['CoB z [m]'], unit: 'm', tol: 0.01 },
+        { name: 'CoB x(6.75) = 103.550 m（notebook 表）', expected: 103.550093, actual: r675['CoB x [m]'], unit: 'm', tol: 0.01 },
+        { name: 'CoF x(6.75) = 98.945 m（notebook 表）', expected: 98.945439, actual: r675['CoF x [m]'], unit: 'm', tol: 0.005 },
+        { name: 'CoF y(6.75) ≈ 0（船体左右对称）', expected: 0, actual: r675['CoF y [m]'], unit: 'm', tol: 1e-3, absFloor: 1e-3 },
+        { name: 'Awl(6.75) 有限差分 vs 邻行差分 一致', expected: awl675, actual: r675['Awl [m2]'], unit: 'm^2', tol: 0.02 * awl675 },
+        { name: 'BM T(6.75) ≈ 26.7 m（notebook 表，量级+符号）', expected: 26.701756, actual: r675['BM T [m]'], unit: 'm', tol: 0.35 * 26.701756 },
+        { name: 'BM L(6.75) ≈ 530.2 m（notebook 表）', expected: 530.195841, actual: r675['BM L [m]'], unit: 'm', tol: 0.05 * 530.195841 },
+        { name: 'BM T < BM L 且均为正（细长船）', expected: 1, actual: (r675['BM T [m]'] > 0 && r675['BM L [m]'] > r675['BM T [m]']) ? 1 : 0, unit: '-', tol: 0, pass: r675['BM T [m]'] > 0 && r675['BM L [m]'] > r675['BM T [m]'] },
+        { name: 'V(0.25) 量级 ≈ Awl×吃水（浅吃水线性）', expected: r25['Awl [m2]'] * 0.25, actual: r25['Displacement [m3]'], unit: 'm^3', tol: 0.25 * r25['Awl [m2]'] * 0.25 },
+        { name: 'V(9.0) 接近船体总容积上限（甲板 21.55 m 未没）', expected: 1, actual: r9['Displacement [m3]'] < 116185 ? 1 : 0, unit: '-', tol: 0, pass: r9['Displacement [m3]'] < 116185 },
+        { name: 'kHeave(6.75) = Awl·ρ·g', expected: r675['Awl [m2]'] * RHO * 9.80665 / 1000, actual: rows.find(r => Math.abs(r['Draft [m]'] - 6.75) < 1e-9)['kHeave [kN/m]'], unit: 'kN/m', tol: 1e-6 },
       ];
     },
   },

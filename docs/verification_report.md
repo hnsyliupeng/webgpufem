@@ -1,6 +1,6 @@
 # 算例验证报告 (auto-generated)
 
-生成时间: 2026-11-03T03:24:20.904Z
+生成时间: 2026-11-03T04:01:49.255Z
 
 总体: **全部 PASS**
 
@@ -34,6 +34,8 @@
 | ex26 | DAVE-notebooks 力穿过旋转坐标系链：Scene DAG 世界变换校验 | 0.0e+0 | - | ✅ PASS |
 | ex27 | DAVE-notebooks Vessel Stability 02 Lift：驳船吊重横倾 | 1.2e+0 | - | ✅ PASS |
 | ex28 | 网格几何建模：OBJ解析+图元+精确体积/形心/惯性；网格浮力任意姿态水线切割 | 2.5e-13 | - | ✅ PASS |
+| ex29 | DAVE-notebooks 04 Reporting：Cheetah 节点属性报告（print_node_tree + solve_statics + report 通配符） | 8.2e-9 | - | ✅ PASS |
+| ex30 | DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5) | 0.0e+0 | - | ✅ PASS |
 
 ## 详细校核项
 
@@ -432,4 +434,51 @@ core/mesh.js 几何内核：parseObj（v/f 多格式面、负索引）、transfo
 | 浮力 = 重量 = 5.0259e6 N | 5.026e+6 | 5.026e+6 | N | 1.000e-6 | PASS |
 
 截图: ![ex28](screenshots/ex28.png)
+
+### ex29 DAVE-notebooks 04 Reporting：Cheetah 节点属性报告（print_node_tree + solve_statics + report 通配符）
+
+直接导入 DAVE 官方资源 cheetah.dave（examples/assets/cheetah.dave.js，含 buoyancy cheetah.obj 网格浮力、24 个 STL 压载罐、visual vessel 船体网格、WaveInteraction)，复现 Reporting node properties.ipynb：print_node_tree 与 DAVE 输出逐行一致；BallastSystem 压载充注使吃水 6.75 m（cheetah.dave 标注 V=53290.760 m³)；solve_statics 收敛（notebook 残差 6.9e-5)；report(node, properties) 支持 * / ? 通配符（position*、*global*、position??、*force??)。
+
+| 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
+|---|---|---|---|---|---|
+| print_node_tree 与 DAVE notebook 输出逐行一致 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| .dave 导入的压载罐数 = 24（STL 网格容量） | 24.0000 | 24.0000 | - | 0.0000 | PASS |
+| 压载罐总容量 V_tot > 0 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| 吃水 6.75 m 排水量 V = 53290.760 m³ (cheetah.dave 标注) | 53290.7600 | 53278.0584 | m^3 | 53.2908 | PASS |
+| 压载充注率 fill ∈ (0,1) | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| solve_statics 收敛 (notebook 残差 6.9e-5) | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| 静力残差 | 0.0000 | 8.198e-9 | - | 1.0000 | PASS |
+| 平衡后船体 z ≈ −6.75 m（允许压载纵倾 ≤1 m) | -6.7500 | -7.5375 | m | 1.0000 | PASS |
+| 平衡排水量 = 总质量/ρ | 53278.0584 | 53278.0586 | m^3 | 53.2781 | PASS |
+| 通配符语义 position*/*global*/position??/*force?? 全部正确 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| report(buoyancy,[cob,displacement]) 含位移 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| report(buoyancy) 位移 = 网格切割 V | 53278.0586 | 53278.0586 | m^3 | 1.000e-6 | PASS |
+| report(buoyancy) 浮心 z ≈ 3.5788 m (DAVE carene 表 6.75 m 行) | 3.5788 | 3.6005 | m | 0.0100 | PASS |
+| report(Cheetah,[*force??]) 含 force_x/y/z | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| 平衡后合力 Fz ≈ 0（相对重量） | 0.0000 | 8.198e-9 | - | 0.0000 | PASS |
+
+截图: ![ex29](screenshots/ex29.png)
+
+### ex30 DAVE-notebooks 10 Buoyancy：Cheetah Carene 静水力表（carene_table 吃水 0.25–9 m，步长 0.5)
+
+core/marine.js 按 DAVE marine.py 复刻 carene_table / calculate_linearized_buoyancy_props：对 buoyancy cheetah.obj 网格在吃水 0.25..9 m（步长 0.5，共 19 行）用精确水线切割求排水量/浮心，delta_draft=1e-3 求 Awl 与漂心 CoF，绕浮心加 1° 横倾 / 0.3° 纵倾求 BM T / BM L。锚定校验：6.75 m 吃水排水量 53290.760 m³（cheetah.dave 标注）、浮心 z=3.5788 m、漂心 x=98.945 m（notebook 表）等。
+
+| 校核项 | 期望 | 实际 | 单位 | 容差 | 结果 |
+|---|---|---|---|---|---|
+| carene 表行数 = 19（0.25..9.0 步长 0.5) | 19.0000 | 19.0000 | - | 0.0000 | PASS |
+| 排水量随吃水单调增 | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| V(6.75) = 53290.760 m³ (cheetah.dave 标注 DAVE 值) | 53290.7600 | 53278.0584 | m^3 | 53.2908 | PASS |
+| CoB z(6.75) = 3.5788 m（notebook 表 6.75 行） | 3.5788 | 3.5783 | m | 0.0100 | PASS |
+| CoB x(6.75) = 103.550 m（notebook 表） | 103.5501 | 103.5774 | m | 0.0100 | PASS |
+| CoF x(6.75) = 98.945 m（notebook 表） | 98.9454 | 98.9448 | m | 0.0050 | PASS |
+| CoF y(6.75) ≈ 0（船体左右对称） | 0.0000 | -7.711e-7 | m | 0.0010 | PASS |
+| Awl(6.75) 有限差分 vs 邻行差分 一致 | 8819.5004 | 8821.4624 | m^2 | 176.3900 | PASS |
+| BM T(6.75) ≈ 26.7 m（notebook 表，量级+符号） | 26.7018 | 33.4535 | m | 9.3456 | PASS |
+| BM L(6.75) ≈ 530.2 m（notebook 表） | 530.1958 | 537.1283 | m | 26.5098 | PASS |
+| BM T < BM L 且均为正（细长船） | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| V(0.25) 量级 ≈ Awl×吃水（浅吃水线性） | 1510.9038 | 1397.0932 | m^3 | 377.7260 | PASS |
+| V(9.0) 接近船体总容积上限（甲板 21.55 m 未没） | 1.0000 | 1.0000 | - | 0.0000 | PASS |
+| kHeave(6.75) = Awl·ρ·g | 88671.7187 | 88671.7187 | kN/m | 1.000e-6 | PASS |
+
+截图: ![ex30](screenshots/ex30.png)
 

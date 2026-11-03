@@ -32,6 +32,44 @@ export function parseObj(text) {
   return { pos, tri };
 }
 
+// ---------- STL (binary or ASCII), as used by DAVE trimesh.load_file for tank meshes ----------
+export function parseStl(text) {
+  // returns { pos, tri } like parseObj
+  if (/^\s*solid/i.test(text) && text.includes('facet')) {
+    const pos = []; const tri = [];
+    const verts = [];
+    for (const raw of text.split('\n')) {
+      const line = raw.trim();
+      if (line.startsWith('vertex')) {
+        const p = line.split(/\s+/).slice(1).map(Number);
+        verts.push(pos.length); pos.push(p);
+        if (verts.length === 3) { tri.push([...verts]); verts.length = 0; }
+      }
+    }
+    return { pos, tri };
+  }
+  throw new Error('parseStl expects ASCII STL text; use parseStlBase64 for binary');
+}
+
+export function parseStlBase64(b64) {
+  const buf = Buffer.from(b64, 'base64');
+  if (buf.length > 84 && buf.toString('latin1', 0, 5) === 'solid' && buf.includes('facet')) {
+    return parseStl(buf.toString('latin1'));
+  }
+  const n = buf.readUInt32LE(80);
+  if (buf.length < 84 + 50 * n) throw new Error('bad binary STL');
+  const pos = []; const tri = [];
+  for (let f = 0; f < n; f++) {
+    const o = 84 + 50 * f + 12; // skip normal
+    const base = pos.length;
+    for (let k = 0; k < 3; k++) {
+      pos.push([buf.readFloatLE(o + 12 * k), buf.readFloatLE(o + 12 * k + 4), buf.readFloatLE(o + 12 * k + 8)]);
+    }
+    tri.push([base, base + 1, base + 2]);
+  }
+  return { pos, tri };
+}
+
 // DAVE trimesh.load_obj transform: v' = R(rotation deg) * (v * scale) + offset
 export function transformMesh(m, { scale = [1, 1, 1], rotation = [0, 0, 0], offset = [0, 0, 0] } = {}) {
   const R = rotVecToMat3(rotation.map(v => v * Math.PI / 180));
