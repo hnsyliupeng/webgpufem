@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { cases } from './cases.js';
 import { fmt } from './math.js';
+import { createWebGPURenderer } from './renderer.js';
+
+let gpu = null;         // WebGPU 渲染器（优先）
+let gpuFrame = null;    // 动画当前帧（WebGPU 路径直接读帧）
 
 const $ = (id) => document.getElementById(id);
 let world = null, currentCase = 'catenary', params = {}, histFrames = null, frameIdx = 0, animTimer = null;
@@ -28,13 +32,40 @@ function resize() {
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(canvas); resize();
-(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+(async () => {
+  gpu = await createWebGPURenderer(canvas);   // 无 WebGPU 时返回 null，回退 WebGL
+  if (gpu) { console.log('[MarineFEM] WebGPU 渲染器已启用'); const b = document.getElementById('gpuBadge'); if (b) b.textContent = '[WebGPU]'; }
+  else { console.log('[MarineFEM] 回退到 WebGL (three.js) 渲染器'); const b = document.getElementById('gpuBadge'); if (b) b.textContent = '[WebGL 回退]'; }
+})();
+(function loop() {
+  requestAnimationFrame(loop);
+  if (gpu) { gpu.frame(); } else { controls.update(); renderer.render(scene, camera); }
+})();
 
 function clearScene() {
   for (const o of [...lineObjs, ...beamObjs, ...bodyObjs]) scene.remove(o);
   lineObjs = []; beamObjs = []; bodyObjs = [];
 }
 function buildScene(w) {
+  if (gpu) {
+    gpu.setLines(w.lines.map(l => ({
+      nodeIds: l.nodeIds, width: 2.5,
+      color: [((l.color >> 16) & 255) / 255, ((l.color >> 8) & 255) / 255, (l.color & 255) / 255],
+      getPoint: (ni) => (gpuFrame ? gpuFrame.nodes[ni] : w.nodes[ni].p),
+    })));
+    gpu.setMeshes(w.bodies.filter(b => b.mesh).map(b => ({
+      verts: b.mesh.verts, faces: b.mesh.faces,
+      color: [((b.color >> 16) & 255) / 255, ((b.color >> 8) & 255) / 255, (b.color & 255) / 255, 1],
+      getModel: () => ({ pos: (gpuFrame ? gpuFrame.bodies[w.bodies.indexOf(b)].pos : b.pos), rot: b.rot }),
+    })));
+    const pts = w.nodes.map(n => n.p);
+    if (pts.length) {
+      const c = pts.reduce((s0, p) => [s0[0] + p[0] / pts.length, s0[1] + p[1] / pts.length, s0[2] + p[2] / pts.length], [0, 0, 0]);
+      const r = Math.max(...pts.map(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]))) * 2.2 || 100;
+      gpu.target = c; gpu.dist = r;
+    }
+    return;
+  }
   clearScene();
   for (const line of w.lines) {
     const g = new THREE.BufferGeometry();
@@ -72,7 +103,9 @@ function buildScene(w) {
   }
 }
 function updateScene(frame) {
+  gpuFrame = frame;
   if (!world) return;
+  if (gpu) return;
   world.lines.forEach((line, li) => {
     const attr = lineObjs[li].geometry.attributes.position;
     line.nodeIds.forEach((ni, i) => {

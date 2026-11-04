@@ -1,6 +1,6 @@
 # webgpufem — MarineFEM: OrcaFlex × DAVE 融合海洋结构分析 GUI
 
-纯前端（HTML + Three.js + 原生 JS）单页应用，融合 OrcaFlex（集中质量有限元 + 非线性时域）与 DAVE（网格体积分水静力 + 静力平衡/频域）两条技术路线的可验证交集，含有限元分析模块与 5 个可视化验证算例。
+纯前端单页应用：**WebGPU（WGSL，TypeScript 源码 `src/renderer.ts` 编译为 `js/renderer.js`）优先渲染，无 WebGPU 时自动回退 WebGL（Three.js 本地化）**，融合 OrcaFlex（集中质量有限元 + 非线性时域）与 DAVE（网格体积分水静力 + 静力平衡/频域）两条技术路线的可验证交集，含有限元分析模块与 5 个可视化验证算例。
 
 ## 运行
 
@@ -23,7 +23,10 @@ js/model.js           模型层（Node/Line/Beam/Body/World）
 js/hydro.js           Airy 波、Morison、网格水静力体积分
 js/solvers.js         静力 / 梁 FEM / 时域 / 频域求解器
 js/cases.js           5 个验证算例
-js/app.js             UI + Three.js 可视化
+js/app.js             UI + 渲染调度（WebGPU 优先 / WebGL 回退）
+js/renderer.js        WebGPU 渲染器（由 src/renderer.ts 经 tsc 编译，WGSL 管线）
+src/renderer.ts       WebGPU 渲染器 TypeScript 源码
+tsconfig.json         TS 编译配置（npx tsc -p tsconfig.json）
 docs/OrcaFlex_vs_DAVE_深度对比调研.md   横纵向对比调研文档
 vendor/               three.module.js + OrbitControls（本地化）
 ```
