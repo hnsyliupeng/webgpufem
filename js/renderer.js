@@ -207,7 +207,7 @@ export class WebGPURenderer {
                 const [a, b, c] = [mesh.verts[f[0]], mesh.verts[f[1]], mesh.verts[f[2]]];
                 const n = norm3(cross3(sub3(b, a), sub3(c, a)));
                 for (const p of [a, b, c])
-                    verts.push(...p, ...n, ...mesh.color, 1);
+                    verts.push(...p, ...n, ...mesh.color); // color 为 vec4 含 alpha
             }
             const buf = this.device.createBuffer({ size: verts.length * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(buf, 0, new Float32Array(verts));
@@ -263,10 +263,11 @@ export class WebGPURenderer {
         if (segCount)
             this.device.queue.writeBuffer(this.lineBuf, 0, data);
         const encoder = this.device.createCommandEncoder();
-        const colorView = this.context.getCurrentTexture().createView();
+        const tex = this.context.getCurrentTexture();
+        const colorView = tex.createView();
         const pass = encoder.beginRenderPass({
             colorAttachments: [{ view: colorView, clearValue: { r: 0.027, g: 0.055, b: 0.094, a: 1 }, loadOp: 'clear', storeOp: 'store' }],
-            depthStencilAttachment: { view: this.getDepth(colorView), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
+            depthStencilAttachment: { view: this.getDepth(tex), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
         });
         const ub = this.device.createBindGroup({ layout: this.linePipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.uniformBuf } }] });
         pass.setPipeline(this.meshPipe);
@@ -297,8 +298,7 @@ export class WebGPURenderer {
         pass.end();
         this.device.queue.submit([encoder.finish()]);
     }
-    getDepth(view) {
-        const t = view.texture;
+    getDepth(t) {
         if (!this.depthTex || this.depthTex.width !== t.width || this.depthTex.height !== t.height) {
             this.depthTex?.destroy();
             this.depthTex = this.device.createTexture({ size: [t.width, t.height], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });

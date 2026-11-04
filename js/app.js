@@ -48,11 +48,18 @@ function clearScene() {
 }
 function buildScene(w) {
   if (gpu) {
-    gpu.setLines(w.lines.map(l => ({
+    const gpuLines = w.lines.map(l => ({
       nodeIds: l.nodeIds, width: 2.5,
       color: [((l.color >> 16) & 255) / 255, ((l.color >> 8) & 255) / 255, (l.color & 255) / 255],
       getPoint: (ni) => (gpuFrame ? gpuFrame.nodes[ni] : w.nodes[ni].p),
-    })));
+    }));
+    // 梁在 WebGPU 路径下以粗线段渲染（两端点）
+    for (const bm of w.beams) gpuLines.push({
+      nodeIds: [bm.n1, bm.n2], width: 6,
+      color: [((bm.color >> 16) & 255) / 255, ((bm.color >> 8) & 255) / 255, (bm.color & 255) / 255],
+      getPoint: (ni) => (gpuFrame ? gpuFrame.nodes[ni] : w.nodes[ni].p),
+    });
+    gpu.setLines(gpuLines);
     gpu.setMeshes(w.bodies.filter(b => b.mesh).map(b => ({
       verts: b.mesh.verts, faces: b.mesh.faces,
       color: [((b.color >> 16) & 255) / 255, ((b.color >> 8) & 255) / 255, (b.color & 255) / 255, 1],

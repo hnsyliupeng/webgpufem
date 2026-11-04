@@ -278,15 +278,29 @@ export const cases = {
       // 参考：同模型无波浪静力（动态松弛）顶端张力
       const w0 = cases.waveCatenary.build(p);
       w0.env.wave = { H: 0, T: p.T, dir: 0 };
-      solveTimeDomain(w0, { T: 60, dt: 0.004, damp: 8 });
+      solveStatic(w0, {}); // Newton 静力作为参考
       const l0 = w0.lines[0], id0 = l0.nodeIds;
       const aa = w0.nodes[id0[id0.length - 2]].p, bb = w0.nodes[id0[id0.length - 1]].p;
       const ll = v3.dist(aa, bb);
       const Tstat = Math.max(0, l0.EA * (ll - l0.L0[l0.L0.length - 1]) / l0.L0[l0.L0.length - 1]);
+      // H=0 自洽校核：无波浪时动态均值应等于静力解
+      const w1 = cases.waveCatenary.build(p);
+      w1.env.wave = { H: 0, T: p.T, dir: 0 };
+      solveStatic(w1, {});
+      const h1 = solveTimeDomain(w1, { T: p.dur, dt: p.dt });
+      const l1 = w1.lines[0], id1 = l1.nodeIds;
+      const T1 = h1.map(hh => {
+        const a2 = hh.nodes[id1[id1.length - 2]], b2 = hh.nodes[id1[id1.length - 1]];
+        const l2 = v3.dist(a2, b2);
+        return Math.max(0, l1.EA * (l2 - l1.L0[l1.L0.length - 1]) / l1.L0[l1.L0.length - 1]);
+      });
+      const tail1 = T1.slice(Math.floor(T1.length / 2));
+      const mean0 = tail1.reduce((s0, v) => s0 + v, 0) / tail1.length;
       return {
         results: [
-          ['顶端张力均值 (N)', mean, Tstat],
-          ['顶端张力峰值 (N)', Math.max(...Ts), NaN],
+          ['无波自洽：动态均值 vs 静力 (N)', mean0, Tstat],
+          ['波浪中顶端张力均值 (N)', mean, NaN],
+          ['波浪中顶端张力峰值 (N)', Math.max(...Ts), NaN],
         ],
         info: `Airy 波 H=${p.H}m T=${p.T}s，Morison Cd=1.2，半隐式 Euler，静力初始化后起振`,
         plot: { label: '顶端张力 T(t) (N)', xs: hist.map(h => h.t), ys: Ts },
