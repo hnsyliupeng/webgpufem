@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MarineFEM · OrcaFlex × DAVE 融合海洋结构分析平台</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js" } }
+</script>
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">🌊 MarineFEM <span>OrcaFlex × DAVE 融合分析内核（开源重建）</span></div>
+  <div class="tabs">
+    <button class="tab active" data-tab="analysis">分析工作台</button>
+    <button class="tab" data-tab="doc">OrcaFlex vs DAVE 调研</button>
+  </div>
+</header>
+
+<main id="tab-analysis">
+  <aside id="sidebar">
+    <section class="panel">
+      <h3>① 验证算例</h3>
+      <select id="caseSelect"></select>
+      <p id="caseDesc" class="desc"></p>
+    </section>
+    <section class="panel">
+      <h3>② 模型参数</h3>
+      <div id="paramPanel"></div>
+    </section>
+    <section class="panel">
+      <h3>③ 求解器</h3>
+      <label>分析类型
+        <select id="solverType">
+          <option value="static">静力分析（Newton 迭代 / FEM 静力）</option>
+          <option value="dynamic">非线性时域动力（半隐式 Euler）</option>
+          <option value="freq">线性频域（固有频率 / RAO 近似）</option>
+        </select>
+      </label>
+      <label id="dynParams">时长 T(s) <input id="simTime" type="number" value="20" step="1"></label>
+      <label id="dynParams2">步长 dt(s) <input id="simDt" type="number" value="0.005" step="0.001"></label>
+      <button id="runBtn" class="run">▶ 运行分析</button>
+      <div id="runStatus" class="status"></div>
+    </section>
+    <section class="panel">
+      <h3>④ 模型信息</h3>
+      <div id="modelInfo" class="info"></div>
+    </section>
+  </aside>
+
+  <section id="viewport">
+    <canvas id="gl"></canvas>
+    <div id="legend"></div>
+  </section>
+
+  <aside id="results">
+    <section class="panel">
+      <h3>⑤ 验证结果（数值 vs 解析）</h3>
+      <table id="resultTable"><thead><tr><th>指标</th><th>数值解</th><th>解析解</th><th>相对误差</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="panel grow">
+      <h3>⑥ 时程曲线</h3>
+      <canvas id="plot"></canvas>
+    </section>
+  </aside>
+</main>
+
+<main id="tab-doc" class="hidden">
+  <iframe id="docFrame" src="docs/OrcaFlex_vs_DAVE_深度对比调研.md"></iframe>
+  <div class="doc-fallback">
+    <p>调研文档：<a href="docs/OrcaFlex_vs_DAVE_深度对比调研.md" target="_blank">docs/OrcaFlex_vs_DAVE_深度对比调研.md</a>（Markdown 源文件，建议在 GitHub 中阅读获得目录与渲染）</p>
+  </div>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
