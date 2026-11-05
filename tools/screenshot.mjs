@@ -71,7 +71,7 @@ function render(world, title, lines, extra) {
     for (let x = 0; x < W; x++) { const o = (y * W + x) * 4; img[o] = c[0]; img[o + 1] = c[1]; img[o + 2] = c[2]; img[o + 3] = 255; } }
 
   // 相机（与 app/renderer 相同）
-  const pts = world.nodes.map(n => n.p);
+  const pts = world.nodes.length ? world.nodes.map(n => n.p) : world.bodies.map(b => b.pos);
   let c0 = pts.length ? pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length, s[2] + p[2] / pts.length], [0, 0, 0]) : (world.bodies[0] ? [...world.bodies[0].pos] : [0, 0, 0]);
   let R = 100;
   if (pts.length) R = Math.max(...pts.map(p => Math.hypot(p[0] - c0[0], p[1] - c0[1], p[2] - c0[2]))) * 2.2;
@@ -170,7 +170,7 @@ function render(world, title, lines, extra) {
 // ---------- 跑全部算例并截图 ----------
 fs.mkdirSync(new URL('../docs/screenshots/', import.meta.url), { recursive: true });
 const outDir = new URL('../docs/screenshots/', import.meta.url).pathname;
-const names = { catenary: 'CASE1_CATENARY', cantilever: 'CASE2_CANTILEVER_BEAM', floatingBox: 'CASE3_FLOATING_BOX', oscillator: 'CASE4_OSCILLATOR', waveCatenary: 'CASE5_WAVE_CATENARY' };
+const names = { catenary: 'CASE1_CATENARY', cantilever: 'CASE2_CANTILEVER_BEAM', floatingBox: 'CASE3_FLOATING_BOX', oscillator: 'CASE4_OSCILLATOR', waveCatenary: 'CASE5_WAVE_CATENARY', beamUDL: 'CASE6_BEAM_UDL', heaveDecay: 'CASE7_HEAVE_DECAY', boxWaveRAO: 'CASE8_BOX_WAVE_RAO', touchdown: 'CASE9_TOUCHDOWN' };
 for (const key of Object.keys(cases)) {
   const c = cases[key];
   const p = {}; c.params.forEach(q => p[q.k] = q.v);

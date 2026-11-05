@@ -307,4 +307,216 @@ export const cases = {
       };
     },
   },
+  beamUDL: {
+    name: '算例6 · 悬臂梁均布载荷（vs qL⁴/8EI）',
+    desc: '12×12 梁单元 + 一致节点载荷，均布载荷悬臂梁端部挠度与解析解对比。',
+    params: [
+      { k: 'L', label: '梁长 L (m)', v: 10 },
+      { k: 'q', label: '均布载荷 q (N/m)', v: 5000 },
+      { k: 'E', label: '弹性模量 E (Pa)', v: 2.1e11 },
+      { k: 'Iz', label: '抗弯惯量 Iz (m⁴)', v: 8.33e-6 },
+      { k: 'A', label: '截面积 A (m²)', v: 0.01 },
+    ],
+    solver: 'static',
+    build(p) {
+      const w = new World();
+      const n1 = w.addNode([0, 0, 0], 0, true);
+      const n2 = w.addNode([p.L, 0, 0], 0, false);
+      const b = new Beam(n1.id, n2.id, { E: p.E, G: 8.1e10, A: p.A, Iy: p.Iz, Iz: p.Iz, J: 2e-5 });
+      b.q = p.q;
+      w.beams.push(b);
+      return w;
+    },
+    run(w, p) {
+      const u = solveBeamStatic(w, w.beams[0], {});
+      const delta = Math.abs(u.disp[1]);
+      const deltaAna = p.q * p.L ** 4 / (8 * p.E * p.Iz);
+      return {
+        results: [
+          ['端部挠度 δ (m)', delta, deltaAna],
+          ['端部转角 θ (rad)', Math.abs(u.disp[5]), p.q * p.L ** 3 / (6 * p.E * p.Iz)],
+        ],
+        info: `均布载荷一致节点载荷向量，单单元精确`,
+      };
+    },
+  },
+
+  heaveDecay: {
+    name: '算例7 · 浮箱 Heave 自由衰减（时域 vs 频域固有周期）',
+    desc: '浮箱初始抬高释放，时域半隐式 Euler + 网格水静力恢复，由衰减时程识别周期并与频域固有周期对比。',
+    params: [
+      { k: 'sx', label: '箱长 X (m)', v: 20 },
+      { k: 'sz', label: '箱宽 Z (m)', v: 10 },
+      { k: 'sy', label: '箱高 Y (m)', v: 6 },
+      { k: 'm', label: '质量 m (kg)', v: 6.15e5 },
+      { k: 'dz', label: '初始抬高 dz (m)', v: 0.5 },
+      { k: 'cDamp', label: '线性阻尼 c (N·s/m)', v: 2e5 },
+      { k: 'dur', label: '仿真时长 (s)', v: 40 },
+      { k: 'dt', label: '步长 dt (s)', v: 0.005 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = 50; w.env.wave = { H: 0, T: 8, dir: 0 }; w.env.current.speed = 0;
+      const draft = p.m / (w.env.rho * p.sx * p.sz);
+      const body = new Body({ pos: [0, -draft + p.sy / 2 + p.dz, 0], mass: p.m,
+        inertia: [p.m * (p.sz ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sz ** 2) / 12],
+        mesh: boxMesh(p.sx, p.sy, p.sz) });
+      body.cDamp = p.cDamp;
+      w.bodies.push(body);
+      return w;
+    },
+    run(w, p) {
+      const body = w.bodies[0];
+      const zEq = -p.m / (w.env.rho * p.sx * p.sz) + p.sy / 2; // 理论平衡位置
+      const fr = freqDomain(w, body);
+      const heave = fr.modes.find(m => m.dof === 'heave');
+      const hist = solveTimeDomain(w, { T: p.dur, dt: p.dt });
+      this._lastHist = hist;
+      const zs = hist.map(h => h.bodies[0].pos[1] - zEq);
+      // 过零识别周期
+      const zeros = [];
+      for (let i = 1; i < zs.length; i++) if (zs[i - 1] > 0 && zs[i] <= 0) {
+        const f = -zs[i - 1] / (zs[i] - zs[i - 1]);
+        zeros.push(hist[i - 1].t + f * (hist[i].t - hist[i - 1].t));
+      }
+      const Tnum = zeros.length >= 2 ? (zeros[zeros.length - 1] - zeros[0]) / (zeros.length - 1) : NaN;
+      const q = Math.floor(zs.length / 4);
+      const amp = (arr) => Math.max(...arr.map(Math.abs));
+      return {
+        results: [
+          ['Heave 衰减周期 (s)', Tnum, heave.T],
+          ['振幅比 (后1/4 / 前1/4)', amp(zs.slice(-q)) / amp(zs.slice(0, q)), NaN],
+        ],
+        info: `网格水静力恢复 + 数值水线面，频域参考 T=${heave.T.toFixed(3)}s，阻尼 c=${p.cDamp}`,
+        plot: { label: 'Heave 位移 z(t) (m)', xs: hist.map(h => h.t), ys: zs },
+      };
+    },
+  },
+
+  boxWaveRAO: {
+    name: '算例8 · 规则波中浮箱 Heave 响应（RAO 时域估计 vs 1.0 量级）',
+    desc: 'Airy 波 Froude-Krylov 激励（数值水线面），时域 Heave 响应的主导周期应等于波浪周期，稳态振幅给出 RAO 估计。',
+    params: [
+      { k: 'sx', label: '箱长 X (m)', v: 20 },
+      { k: 'sz', label: '箱宽 Z (m)', v: 10 },
+      { k: 'sy', label: '箱高 Y (m)', v: 6 },
+      { k: 'm', label: '质量 m (kg)', v: 6.15e5 },
+      { k: 'H', label: '波高 H (m)', v: 2 },
+      { k: 'T', label: '波周期 T (s)', v: 3.5 },
+      { k: 'cDamp', label: '线性阻尼 c (N·s/m)', v: 3e5 },
+      { k: 'dur', label: '仿真时长 (s)', v: 80 },
+      { k: 'dt', label: '步长 dt (s)', v: 0.005 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = 50;
+      w.env.wave = { H: p.H, T: p.T, dir: 0 };
+      const draft = p.m / (w.env.rho * p.sx * p.sz);
+      const body = new Body({ pos: [0, -draft + p.sy / 2, 0], mass: p.m,
+        inertia: [p.m * (p.sz ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sz ** 2) / 12],
+        mesh: boxMesh(p.sx, p.sy, p.sz) });
+      body.cDamp = p.cDamp;
+      w.bodies.push(body);
+      return w;
+    },
+    run(w, p) {
+      const body = w.bodies[0];
+      const z0 = body.pos[1];
+      const hist = solveTimeDomain(w, { T: p.dur, dt: p.dt });
+      this._lastHist = hist;
+      const zs = hist.map(h => h.bodies[0].pos[1] - z0);
+      const tail = zs.slice(Math.floor(zs.length / 2));
+      const amp = (Math.max(...tail) - Math.min(...tail)) / 2;
+      // 主导周期（过零）
+      const zt = tail, xs = hist.slice(Math.floor(hist.length / 2)).map(h => h.t);
+      const zeros = [];
+      for (let i = 1; i < zt.length; i++) if (zt[i - 1] > 0 && zt[i] <= 0) {
+        const f = -zt[i - 1] / (zt[i] - zt[i - 1]);
+        zeros.push(xs[i - 1] + f * (xs[i] - xs[i - 1]));
+      }
+      const Tresp = zeros.length >= 2 ? (zeros[zeros.length - 1] - zeros[0]) / (zeros.length - 1) : NaN;
+      return {
+        results: [
+          ['响应主导周期 (s)', Tresp, p.T],
+          ['Heave 稳态振幅 (m)', amp, NaN],
+          ['RAO 估计 (振幅/波幅)', amp / (p.H / 2), NaN],
+        ],
+        info: `Froude-Krylov 激励 ρgAwη，Aw 由数值水线面差分得到`,
+        plot: { label: 'Heave 响应 z(t) (m)', xs: hist.map(h => h.t), ys: zs },
+      };
+    },
+  },
+
+  touchdown: {
+    name: '算例9 · 触底悬链线（海床接触 + vs 解析触地点解）',
+    desc: '部分搁置海床的系泊缆：罚函数海床接触 + 动态松弛静力，与触地点悬链线解析解对比 H、顶端张力与离底点。',
+    params: [
+      { k: 'S', label: '水平跨距 S (m)', v: 400 },
+      { k: 'd', label: '水深 d (m)', v: 60 },
+      { k: 'h', label: '回收端高出海床 h (m)', v: 90 },
+      { k: 'L', label: '缆长 L (m)', v: 415 },
+      { k: 'w', label: '单位湿重 w (N/m)', v: 1500 },
+      { k: 'EA', label: '轴向刚度 EA (N)', v: 5e8 },
+      { k: 'n', label: '分段数', v: 50 },
+    ],
+    solver: 'static',
+    build(p) {
+      const w = new World();
+      w.env.depth = p.d; w.env.seaLevel = -1e6; // 全段出水，湿重=干重，与解析解一致
+      const n = Math.round(p.n), ids = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        ids.push(w.addNode([p.S * t, -p.d + p.h * t * t, 0], 0, i === 0 || i === n).id); // 贴海床二次初值
+      }
+      w.lines.push(new Line(ids, { EA: p.EA, EI: 0, w: p.w / w.env.g, d: 0.3, cd: 1.2, ca: 1.0, L0: Array(n).fill(p.L / n), mu: 5.0 }));
+      return w;
+    },
+    run(w, p) {
+      solveTimeDomain(w, { T: 200, dt: 0.002, damp: 10 });
+      // 解析：触地点竖向力=0（切线水平）。悬垂段：Xs=a·asinh(Ls/a), h=a(cosh(Ls/a)−1)
+      // 平床段: flat=L−Ls, S=Xs+flat → L−S = a(u−asinh u), u=Ls/a, a=h/(cosh u−1)。对 u 二分
+      const g = (u) => {
+        const a = p.h / (Math.cosh(u) - 1);
+        return p.L - p.S - a * (u - Math.asinh(u));
+      };
+      // g 非单调：扫描首个变号区间再二分
+      let lo = 0, hi = 0;
+      let prevU = 0.05, prevG = g(prevU);
+      for (let u = 0.1; u <= 6; u += 0.05) {
+        const gv = g(u);
+        if (prevG > 0 && gv <= 0) { lo = prevU; hi = u; break; }
+        prevU = u; prevG = gv;
+      }
+      for (let i = 0; i < 100; i++) { const m = (lo + hi) / 2; if (g(m) > 0) lo = m; else hi = m; }
+      const u = (lo + hi) / 2;
+      const a = p.h / (Math.cosh(u) - 1);
+      const Ls = a * u;
+      const Hana = p.w * a, TtopAna = p.w * (p.h + a), xTdAna = p.S - a * Math.asinh(Ls / a); // 离底点=锚点+平床长
+      // 数值
+      const line = w.lines[0], ids = line.nodeIds;
+      let Ttop = 0, tTop = [1, 0, 0], xTd = 0;
+      for (let i = 0; i < ids.length - 1; i++) {
+        const A = w.nodes[ids[i]].p, B = w.nodes[ids[i + 1]].p;
+        const l = v3.dist(A, B);
+        const T = Math.max(0, line.EA * (l - line.L0[i]) / line.L0[i]);
+        if (i === ids.length - 2) { Ttop = T; tTop = v3.scale(v3.sub(B, A), 1 / l); }
+      }
+      for (let i = 0; i < ids.length; i++) { // 离底点：最后一个贴床节点
+        const y = w.nodes[ids[i]].p[1];
+        if (y < -p.d + 0.5) xTd = Math.max(xTd, w.nodes[ids[i]].p[0]);
+      }
+      const Hnum = Ttop * Math.abs(tTop[0]);
+      return {
+        results: [
+          ['水平张力 H (N)', Hnum, Hana],
+          ['顶端张力 T_top (N)', Ttop, TtopAna],
+          ['离底点 x_td (m)', xTd, xTdAna],
+        ],
+        info: `海床罚函数接触 + 动态松弛，悬垂段长 Ls=${Ls.toFixed(1)}m`,
+      };
+    },
+  },
+
 };

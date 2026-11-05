@@ -59,11 +59,20 @@ function lineExternalForces(world, line, t, out, withHydro = true) {
       // 附加质量（Froude-Krylov+Ca）作为节点等效质量增量处理见动力求解
       n._waveA = w.a; n._ca = line.ca; n._half = half; n._area = A; n._seg = seg;
     }
-    // 海床接触（罚函数）
+    // 海床接触（罚函数法向 + Coulomb 切向摩擦）
     const bed = -env.depth;
     if (n.p[1] < bed) {
       const pen = bed - n.p[1];
-      f = v3.add(f, [0, 1e6 * pen * line.d, 0]);
+      const N = 1e6 * pen * line.d; // 法向反力
+      f = v3.add(f, [0, N, 0]);
+      if (line.mu) { // 摩擦力反向于切向速度（正则化）
+        const vt = [n.v[0], 0, n.v[2]];
+        const sp = v3.len(vt);
+        if (sp > 1e-6) {
+          const Ft = Math.min(line.mu * N, 5e6 * pen) * Math.tanh(sp / 0.05);
+          f = v3.sub(f, v3.scale(v3.norm(vt), Ft));
+        }
+      }
     }
     out[ids[i]] = f;
   }
@@ -125,7 +134,7 @@ export function beamStiffLocal(L, E, A, G, J, Iy, Iz) {
 }
 
 export function solveBeamStatic(world, beam, loads) {
-  // loads: {nodeId: [Fx,Fy,Fz]}；n1 全固定
+  // loads: {nodeId: [Fx,Fy,Fz]}；n1 全固定；beam.q 为均布载荷(N/m, 沿 -y)
   const n1 = world.nodes[beam.n1], n2 = world.nodes[beam.n2];
   const p1 = n1.p, p2 = n2.p;
   const L = v3.dist(p1, p2);
@@ -162,6 +171,11 @@ export function solveBeamStatic(world, beam, loads) {
   const F = new Array(12).fill(0);
   const l2 = loads[beam.n2] || [0, 0, 0];
   F[6] = l2[0]; F[7] = l2[1]; F[8] = l2[2];
+  if (beam.q) { // 均布载荷 p=-q 的一致节点载荷（平面 dofs [w1,θ1,w2,θ2]=[1,5,7,11]）
+    const p = -beam.q;
+    F[1] += p * L / 2; F[5] += p * L * L / 12;
+    F[7] += p * L / 2; F[11] += -p * L * L / 12;
+  }
   const K = free.map(i => free.map(j => kg[i][j]));
   const b = free.map(i => F[i]);
   const u = solveLinear(K, b);
@@ -186,6 +200,15 @@ export function solveTimeDomain(world, { T = 20, dt = 0.005, damp = 0 } = {}) {
       const h = hydrostaticForce(body, world.env);
       body._hydF = h.F; body._hydM = h.M; body._dispV = h.V;
       body.f = v3.add(body.f, v3.scale(world.gravity, body.mass));
+      // 规则波 Froude-Krylov 垂向激励（水线面近似）
+      if (world.env.wave.H > 0 && body.mesh) {
+        const Aw = waterplaneArea(body, world.env);
+        const eta = airyWave(world.env, body.pos[0], world.env.seaLevel, body.pos[2], t).eta;
+        body.f = v3.add(body.f, [0, world.env.rho * world.env.g * Aw * eta, 0]);
+        body._eta = eta; body._Aw = Aw;
+      }
+      // 线性辐射阻尼（可选，body.cDamp）
+      if (body.cDamp) body.f = v3.sub(body.f, v3.scale(body.vel, body.cDamp));
     }
     // 积分
     for (const n of world.nodes) {
@@ -233,6 +256,10 @@ export function freqDomain(world, body) {
   const genIdx = [0, 2, 1, 3, 5, 4]; // 广义力 [Fx,Fz,Fy,Mx,Mz,My]
   const C = Array.from({ length: 6 }, () => new Array(6).fill(0));
   const eps = [0.05, 0.05, 0.05, 0.01, 0.01, 0.01];
+  // 基线广义力（平衡点可能有常值偏置，需扣除）
+  const h0 = hydrostaticForce(body, env);
+  const F0 = v3.add(h0.F, v3.scale(world.gravity, body.mass));
+  const gen0 = [...F0, ...h0.M];
   for (let j = 0; j < 6; j++) {
     const save = { pos: [...body.pos], rot: [...body.rot] };
     if (j === 0) body.pos[0] += eps[j];
@@ -245,7 +272,7 @@ export function freqDomain(world, body) {
     const h = hydrostaticForce(body, env);
     const F = v3.add(h.F, v3.scale(world.gravity, body.mass)); // 浮力 + 重力
     const genFull = [...F, ...h.M];
-    for (let i = 0; i < 6; i++) C[i][j] = -genFull[genIdx[i]] / eps[j];
+    for (let i = 0; i < 6; i++) C[i][j] = -(genFull[genIdx[i]] - gen0[genIdx[i]]) / eps[j];
     body.pos = save.pos; body.rot = save.rot;
   }
   body.pos = pose0.pos; body.rot = pose0.rot;
@@ -258,4 +285,17 @@ export function freqDomain(world, body) {
     return { dof: d, wn, T: 2 * Math.PI / wn, K: k };
   });
   return { C, modes };
+}
+
+// 数值水线面面积：dV/dz 有限差分
+export function waterplaneArea(body, env) {
+  if (!body.mesh) return 0;
+  const eps = 0.02;
+  const save = [...body.pos];
+  body.pos[1] += eps;
+  const V1 = hydrostaticForce(body, env).V;
+  body.pos[1] = save[1] - eps;
+  const V0 = hydrostaticForce(body, env).V;
+  body.pos[1] = save[1];
+  return Math.abs(V1 - V0) / (2 * eps);
 }
