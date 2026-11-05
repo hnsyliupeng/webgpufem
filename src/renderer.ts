@@ -2,7 +2,7 @@
 // WGSL 管线：线段（屏幕空间加宽的 billboard）、三角网格（Lambert）、海面/网格
 // 相机：内置轨道控制（拖拽旋转、滚轮缩放），不依赖 three.js
 
-export interface RenderLine { nodeIds: number[]; getPoint: (i: number) => [number, number, number]; color: [number, number, number]; width: number; }
+export interface RenderLine { nodeIds: number[]; getPoint: (i: number) => [number, number, number]; color: [number, number, number]; width: number; getSegColor?: (seg: number) => [number, number, number]; }
 export interface RenderMesh { verts: number[][]; faces: number[][]; color: [number, number, number]; getModel: () => { pos: number[]; rot: number[] }; }
 
 const WGSL_COMMON = /* wgsl */`
@@ -233,8 +233,9 @@ export class WebGPURenderer {
     for (const l of this.lines) {
       for (let i = 0; i < l.nodeIds.length - 1; i++) {
         const p0 = l.getPoint(l.nodeIds[i]), p1 = l.getPoint(l.nodeIds[i + 1]);
+        const col = l.getSegColor ? l.getSegColor(i) : l.color;
         for (let v = 0; v < 6; v++) {
-          data.set([p0[0], p0[1], p0[2], 1, p1[0], p1[1], p1[2], 1, l.width, l.color[0], l.color[1], l.color[2], 1], o);
+          data.set([p0[0], p0[1], p0[2], 1, p1[0], p1[1], p1[2], 1, l.width, col[0], col[1], col[2], 1], o);
           o += 10;
         }
       }

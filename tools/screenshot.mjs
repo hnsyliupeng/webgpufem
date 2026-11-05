@@ -147,11 +147,19 @@ function render(world, title, lines, extra) {
     const a = world.nodes[bm.n1].p, b = world.nodes[bm.n2].p;
     drawSeg(a, b, [245, 158, 11], 3);
   }
-  // 线
+  // 线（张力云图 蓝→红）
+  let tMax = 1;
+  for (const l of world.lines) for (let i = 0; i < l.nodeIds.length - 1; i++) {
+    const a = world.nodes[l.nodeIds[i]].p, b = world.nodes[l.nodeIds[i + 1]].p;
+    tMax = Math.max(tMax, Math.max(0, l.EA * (v3.dist(a, b) - l.L0[i]) / l.L0[i]));
+  }
   for (const l of world.lines) {
-    const col = [((l.color >> 16) & 255) / 255 * 255, ((l.color >> 8) & 255) / 255 * 255, (l.color & 255) / 255 * 255];
-    for (let i = 0; i < l.nodeIds.length - 1; i++)
-      drawSeg(world.nodes[l.nodeIds[i]].p, world.nodes[l.nodeIds[i + 1]].p, col, 1);
+    for (let i = 0; i < l.nodeIds.length - 1; i++) {
+      const a = world.nodes[l.nodeIds[i]].p, b = world.nodes[l.nodeIds[i + 1]].p;
+      const t = Math.max(0, l.EA * (v3.dist(a, b) - l.L0[i]) / l.L0[i]);
+      const x = Math.min(1, t / tMax);
+      drawSeg(a, b, [x * 255, (1 - x * 0.7) * 200 + 40, (1 - x) * 255], 1);
+    }
   }
   // 标题栏
   drawText(img, W, 16, 12, title, 2, [56, 189, 248]);
@@ -172,7 +180,7 @@ for (const key of Object.keys(cases)) {
     const e = isFinite(ana) && ana !== 0 ? Math.abs((num - ana) / ana) * 100 : null;
     return e === null ? null : e.toFixed(2) + '%';
   }).filter(Boolean).join(' ');
-  const pngBuf = render(w, names[key] + '  MARINEFEM WEBGPU VIEW', w.lines, 'ERR: ' + (errs || 'QUALITATIVE'));
+  const pngBuf = render(w, names[key] + '  MARINEFEM WEBGPU VIEW', w.lines, 'TENSION MAP  ERR: ' + (errs || 'QUALITATIVE'));
   fs.writeFileSync(outDir + names[key] + '.png', pngBuf);
   console.log('已输出', names[key] + '.png', '误差:', errs || '定性');
   if (out.plot) { // 时程曲线单独出图

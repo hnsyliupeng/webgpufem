@@ -254,8 +254,9 @@ export class WebGPURenderer {
         for (const l of this.lines) {
             for (let i = 0; i < l.nodeIds.length - 1; i++) {
                 const p0 = l.getPoint(l.nodeIds[i]), p1 = l.getPoint(l.nodeIds[i + 1]);
+                const col = l.getSegColor ? l.getSegColor(i) : l.color;
                 for (let v = 0; v < 6; v++) {
-                    data.set([p0[0], p0[1], p0[2], 1, p1[0], p1[1], p1[2], 1, l.width, l.color[0], l.color[1], l.color[2], 1], o);
+                    data.set([p0[0], p0[1], p0[2], 1, p1[0], p1[1], p1[2], 1, l.width, col[0], col[1], col[2], 1], o);
                     o += 10;
                 }
             }
