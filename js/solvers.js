@@ -86,7 +86,7 @@ export function totalLineForces(world, line, t, withHydro = true) {
 }
 
 // ---------- 静力求解（Newton + 数值雅可比，仅自由节点） ----------
-export function solveStatic(world, { maxIter = 300, tol = 1e-6 } = {}) {
+export function solveStatic(world, { maxIter = 300, tol = 1e-6, hydro = false } = {}) {
   for (const line of world.lines) initLine(world, line);
   const free = [];
   world.nodes.forEach((n, i) => { if (!n.fixed) free.push(i); });
@@ -96,7 +96,7 @@ export function solveStatic(world, { maxIter = 300, tol = 1e-6 } = {}) {
     free.forEach((ni, k) => { world.nodes[ni].p = [x[3 * k], x[3 * k + 1], x[3 * k + 2]]; });
     const res = [];
     for (const line of world.lines) {
-      const f = totalLineForces(world, line, 0, false);
+      const f = totalLineForces(world, line, 0, hydro);
       free.forEach(ni => res.push(f[ni][0], f[ni][1], f[ni][2]));
     }
     return res;
@@ -131,6 +131,78 @@ export function beamStiffLocal(L, E, A, G, J, Iy, Iz) {
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) k[idy[i]][idy[j]] = EIy * by[i][j];
   k[3][3] = GJ; k[3][9] = -GJ; k[9][3] = -GJ; k[9][9] = GJ;
   return k;
+}
+
+// 单个梁单元的全局 12×12 刚度 + 单元长度
+function beamElemGlobal(p1, p2, beam) {
+  const L = v3.dist(p1, p2);
+  const ex = v3.norm(v3.sub(p2, p1));
+  let ey = Math.abs(ex[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
+  const ez = v3.norm(v3.cross(ex, ey)); ey = v3.cross(ez, ex);
+  const T = [
+    [ex[0], ey[0], ez[0], 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [ex[1], ey[1], ez[1], 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [ex[2], ey[2], ez[2], 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, ex[0], ey[0], ez[0], 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, ex[1], ey[1], ez[1], 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, ex[2], ey[2], ez[2], 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, ex[0], ey[0], ez[0], 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, ex[1], ey[1], ez[1], 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, ex[2], ey[2], ez[2], 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, ex[0], ey[0], ez[0]],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, ex[1], ey[1], ez[1]],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, ex[2], ey[2], ez[2]]];
+  const kl = beamStiffLocal(L, beam.E, beam.A, beam.G, beam.J, beam.Iy, beam.Iz);
+  const Tt = T[0].map((_, c) => T.map(r => r[c]));
+  const kg = Array.from({ length: 12 }, () => new Array(12).fill(0));
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++)
+    for (let a = 0; a < 12; a++) for (let b = 0; b < 12; b++)
+      kg[i][j] += T[i][a] * kl[a][b] * Tt[b][j];
+  return { kg, L, T };
+}
+
+// 多单元梁链 FEM 静力装配：ids 节点链，bc={first:'pin'|'fixed', last:'pin'|'fixed'|'free'}
+// loads: {nodeId:[Fx,Fy,Fz]}；beam.q 为全局 -y 均布载荷(N/m)（每单元一致节点载荷，沿梁轴 x 假设）
+export function solveBeamChain(world, ids, beam, loads, bc = { first: 'pin', last: 'pin' }) {
+  const ne = ids.length - 1, ndof = ids.length * 6;
+  const K = Array.from({ length: ndof }, () => new Array(ndof).fill(0));
+  const F = new Array(ndof).fill(0);
+  for (let e = 0; e < ne; e++) {
+    const { kg, L } = beamElemGlobal(world.nodes[ids[e]].p, world.nodes[ids[e + 1]].p, beam);
+    const dofs = [];
+    for (let n = 0; n < 2; n++) for (let d = 0; d < 6; d++) dofs.push((e + n) * 6 + d);
+    for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) K[dofs[i]][dofs[j]] += kg[i][j];
+    if (beam.q) { // 一致节点载荷（局部 w,θ 平面 → 全局 y 向，假设梁沿 x）
+      const p = -beam.q;
+      for (const n of [e, e + 1]) {
+        F[n * 6 + 1] += p * L / 2;
+      }
+      F[e * 6 + 5] += p * L * L / 12;
+      F[(e + 1) * 6 + 5] += -p * L * L / 12;
+    }
+  }
+  for (const idStr in loads) {
+    const gi = ids.indexOf(Number(idStr));
+    if (gi < 0) continue;
+    const l = loads[idStr];
+    F[gi * 6] += l[0]; F[gi * 6 + 1] += l[1]; F[gi * 6 + 2] += l[2];
+  }
+  // 边界条件
+  const fixedDofs = new Set();
+  const applyBC = (gi, mode) => {
+    if (mode === 'fixed') for (let d = 0; d < 6; d++) fixedDofs.add(gi * 6 + d);
+    else if (mode === 'pin') for (let d = 0; d < 3; d++) fixedDofs.add(gi * 6 + d);
+  };
+  applyBC(0, bc.first || 'pin');
+  applyBC(ids.length - 1, bc.last || 'pin');
+  const free = [];
+  for (let d = 0; d < ndof; d++) if (!fixedDofs.has(d)) free.push(d);
+  const Kred = free.map(i => free.map(j => K[i][j]));
+  const bred = free.map(i => F[i]);
+  const u = solveLinear(Kred, bred);
+  const disp = new Array(ndof).fill(0);
+  free.forEach((d, k) => disp[d] = u[k]);
+  return { disp, ids };
 }
 
 export function solveBeamStatic(world, beam, loads) {
@@ -209,6 +281,14 @@ export function solveTimeDomain(world, { T = 20, dt = 0.005, damp = 0 } = {}) {
       }
       // 线性辐射阻尼（可选，body.cDamp）
       if (body.cDamp) body.f = v3.sub(body.f, v3.scale(body.vel, body.cDamp));
+      // 风载：F=½ρ_air·Cd·A·U²，作用于质心上方 windZ 处（产生倾覆力矩）
+      if (world.env.wind.speed > 0 && body.windArea) {
+        const Fw = 0.5 * 1.225 * (body.windCd || 1) * body.windArea * world.env.wind.speed ** 2;
+        const dir = [Math.cos(world.env.wind.dir), 0, Math.sin(world.env.wind.dir)];
+        const F = v3.scale(dir, Fw);
+        body.f = v3.add(body.f, F);
+        body.mom = v3.add(body.mom, v3.cross([0, body.windZ || 0, 0], F));
+      }
     }
     // 积分
     for (const n of world.nodes) {
@@ -226,6 +306,7 @@ export function solveTimeDomain(world, { T = 20, dt = 0.005, damp = 0 } = {}) {
       const a = v3.scale(v3.add(b.f, b._hydF || [0, 0, 0]), 1 / b.mass);
       b.vel = v3.add(b.vel, v3.scale(a, dt));
       b.pos = v3.add(b.pos, v3.scale(b.vel, dt));
+      if (b.angDamp) b.mom = v3.sub(b.mom, v3.scale(b.angVel, b.angDamp)); // 角阻尼
       const am = v3.scale(v3.add(b.mom, b._hydM || [0, 0, 0]), 1 / (b.inertia[0] || 1));
       b.angVel = v3.add(b.angVel, v3.scale(am, dt));
       const w = b.angVel, R = b.rot;

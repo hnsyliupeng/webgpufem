@@ -1,7 +1,7 @@
 // 可视化验证算例：每个算例给出模型构建 + 解析参考 + 评估指标
 import { v3, solveLinear } from './math.js';
 import { World, Line, Beam, Body, boxMesh, initLine } from './model.js';
-import { solveStatic, solveBeamStatic, solveTimeDomain, freqDomain } from './solvers.js';
+import { solveStatic, solveBeamStatic, solveBeamChain, solveTimeDomain, freqDomain } from './solvers.js';
 import { hydrostaticForce } from './hydro.js';
 
 // 解析悬链线：以 (H, θ0) 为未知量，沿弧长积分 ODE 边值求解，再输出构型采样点
@@ -248,7 +248,7 @@ export const cases = {
       { k: 'T', label: '波周期 T (s)', v: 8 },
       { k: 'dur', label: '仿真时长 (s)', v: 40 },
       { k: 'dt', label: '步长 dt (s)', v: 0.004 },
-      { k: 'n', label: '分段数', v: 30 },
+      { k: 'n', label: '分段数', v: 20 },
     ],
     solver: 'dynamic',
     build(p) {
@@ -515,6 +515,173 @@ export const cases = {
           ['离底点 x_td (m)', xTd, xTdAna],
         ],
         info: `海床罚函数接触 + 动态松弛，悬垂段长 Ls=${Ls.toFixed(1)}m`,
+      };
+    },
+  },
+
+
+  ssBeam: {
+    name: '算例10 · 简支梁跨中集中载荷（多单元 FEM vs δ=PL³/48EI）',
+    desc: '2 个 12DoF 梁单元链式装配，两端铰支（pin），跨中集中载荷，与材料力学解析解对比。',
+    params: [
+      { k: 'L', label: '梁长 L (m)', v: 10 },
+      { k: 'P', label: '跨中载荷 P (N)', v: 1e4 },
+      { k: 'E', label: '弹性模量 E (Pa)', v: 2.1e11 },
+      { k: 'Iz', label: '抗弯惯量 Iz (m⁴)', v: 8.33e-6 },
+      { k: 'A', label: '截面积 A (m²)', v: 0.01 },
+    ],
+    solver: 'static',
+    build(p) {
+      const w = new World();
+      const n1 = w.addNode([0, 0, 0], 0, true);
+      const n2 = w.addNode([p.L / 2, 0, 0], 0, false);
+      const n3 = w.addNode([p.L, 0, 0], 0, true);
+      w._chain = { ids: [n1.id, n2.id, n3.id], beam: { E: p.E, G: 8.1e10, A: p.A, Iy: p.Iz, Iz: p.Iz, J: 2e-5 }, loads: { [n2.id]: [0, -p.P, 0] } };
+      w.beams.push(new Beam(n1.id, n2.id, w._chain.beam), new Beam(n2.id, n3.id, w._chain.beam));
+      return w;
+    },
+    run(w, p) {
+      const c = w._chain;
+      const u = solveBeamChain(w, c.ids, c.beam, c.loads, { first: 'pin', last: 'pin' });
+      const dMid = Math.abs(u.disp[1 * 6 + 1]); // 中节点 y 位移
+      const th1 = Math.abs(u.disp[0 * 6 + 5]);   // 端部转角 θy
+      return {
+        results: [
+          ['跨中挠度 δ (m)', dMid, p.P * p.L ** 3 / (48 * p.E * p.Iz)],
+          ['支座转角 θ (rad)', th1, p.P * p.L ** 2 / (16 * p.E * p.Iz)],
+        ],
+        info: `2 单元链式装配 18×18 缩减刚度，pin 边界（仅约束平动 3DoF）`,
+      };
+    },
+  },
+
+  pendulum: {
+    name: '算例11 · 单摆小幅摆动（时域 vs T=2π√(L/g)）',
+    desc: '不可伸长缆（高 EA）+ 端部集中质量，重力场中释放，由摆动时程识别周期。',
+    params: [
+      { k: 'L', label: '摆长 L (m)', v: 10 },
+      { k: 'm', label: '摆锤质量 m (kg)', v: 50 },
+      { k: 'th0', label: '初始摆角 θ0 (deg)', v: 15 },
+      { k: 'dur', label: '仿真时长 (s)', v: 30 },
+      { k: 'dt', label: '步长 dt (s)', v: 0.001 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = 1000; w.env.seaLevel = -1e6; w.env.wave = { H: 0, T: 8, dir: 0 }; w.env.current.speed = 0;
+      const th = p.th0 * Math.PI / 180;
+      const a = w.addNode([0, 0, 0], 0, true);
+      const b = w.addNode([p.L * Math.sin(th), -p.L * Math.cos(th), 0], 0, false);
+      w.lines.push(new Line([a.id, b.id], { EA: 1e8, EI: 0, w: p.m / p.L, d: 0.05, cd: 0, L0: [p.L] }));
+      return w;
+    },
+    run(w, p) {
+      const hist = solveTimeDomain(w, { T: p.dur, dt: p.dt });
+      this._lastHist = hist;
+      const xs = hist.map(h => h.nodes[1][0]);
+      const zeros = [];
+      for (let i = 1; i < xs.length; i++) if (xs[i - 1] > 0 && xs[i] <= 0) {
+        const f = -xs[i - 1] / (xs[i] - xs[i - 1]);
+        zeros.push(hist[i - 1].t + f * (hist[i].t - hist[i - 1].t));
+      }
+      const Tnum = zeros.length >= 2 ? (zeros[zeros.length - 1] - zeros[0]) / (zeros.length - 1) : NaN;
+      return {
+        results: [['摆动周期 T (s)', Tnum, 2 * Math.PI * Math.sqrt(p.L / w.env.g)]],
+        info: `半隐式 Euler，θ0=${p.th0}°，过零识别周期`,
+        plot: { label: '摆锤 x(t) (m)', xs: hist.map(h => h.t), ys: xs },
+      };
+    },
+  },
+
+  currentLine: {
+    name: '算例12 · 均匀海流中垂直悬缆（Morison 拖曳 vs 解析合力）',
+    desc: '全淹没垂直缆 + 均匀海流 U：顶端张力 = √[(湿重)² + (总拖曳)²]，顶端角 tanθ=拖曳/湿重。',
+    params: [
+      { k: 'd', label: '水深/缆长 L (m)', v: 60 },
+      { k: 'U', label: '海流速 U (m/s)', v: 1.5 },
+      { k: 'w', label: '单位干重 w (N/m)', v: 800 },
+      { k: 'diam', label: '缆径 d (m)', v: 0.2 },
+      { k: 'Cd', label: '拖曳系数 Cd', v: 1.2 },
+      { k: 'EA', label: '轴向刚度 EA (N)', v: 5e8 },
+      { k: 'n', label: '分段数', v: 20 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = p.d; w.env.seaLevel = 0; w.env.wave = { H: 0, T: 8, dir: 0 };
+      w.env.current = { speed: p.U, dir: 0, profile: 'uniform' };
+      const n = Math.round(p.n), ids = [];
+      for (let i = 0; i <= n; i++) ids.push(w.addNode([0, -p.d * i / n, 0], 0, i === 0).id);
+      w.lines.push(new Line(ids, { EA: p.EA, EI: 0, w: p.w / w.env.g, d: p.diam, cd: p.Cd, ca: 1.0, L0: Array(n).fill(p.d / n) }));
+      return w;
+    },
+    run(w, p) {
+      solveTimeDomain(w, { T: 250, dt: 0.0005, damp: 15 }); // 强阻尼动态松弛至稳态（dt 受 CFL 限制）
+      const line = w.lines[0], ids = line.nodeIds;
+      const a = w.nodes[ids[0]].p, b = w.nodes[ids[1]].p; // 固定端在首节点
+      const dd = v3.sub(b, a), l = v3.len(dd);
+      const Ttop = Math.max(0, line.EA * (l - line.L0[0]) / line.L0[0]);
+      const thTop = Math.atan2(Math.abs(dd[0]), Math.abs(dd[1]));
+      const A = Math.PI * p.diam ** 2 / 4;
+      const Wsub = (p.w - w.env.rho * w.env.g * A) * p.d; // 湿重
+      const D = 0.5 * w.env.rho * p.Cd * p.diam * p.U ** 2 * p.d; // 总拖曳
+      return {
+        results: [
+          ['顶端张力 T_top (N)', Ttop, Math.hypot(Wsub, D)],
+          ['顶端倾角 θ (rad)', thTop, Math.atan2(D, Wsub)],
+        ],
+        info: `Morison 拖曳 ½ρCd·d·U² 沿缆长积分，湿重 W=${Wsub.toFixed(0)}N，拖曳 D=${D.toFixed(0)}N`,
+      };
+    },
+  },
+
+  windHeel: {
+    name: '算例13 · 浮箱风载稳态倾斜（时域 vs tanθ=F·z/(ρgV·GM)）',
+    desc: '风载倾覆力矩 vs 水静力复原力矩平衡：稳态倾角与解析力矩平衡解对比。',
+    params: [
+      { k: 'sx', label: '箱长 X (m)', v: 20 },
+      { k: 'sz', label: '箱宽 Z (m)', v: 10 },
+      { k: 'sy', label: '箱高 Y (m)', v: 6 },
+      { k: 'm', label: '质量 m (kg)', v: 6.15e5 },
+      { k: 'U', label: '风速 U (m/s)', v: 20 },
+      { k: 'windZ', label: '风力力臂 z (m)', v: 3 },
+      { k: 'angDamp', label: '角阻尼 (N·m·s)', v: 8e6 },
+      { k: 'dur', label: '仿真时长 (s)', v: 300 },
+      { k: 'dt', label: '步长 dt (s)', v: 0.01 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = 50; w.env.wave = { H: 0, T: 8, dir: 0 }; w.env.current.speed = 0;
+      w.env.wind = { speed: p.U, dir: 0 };
+      const draft = p.m / (w.env.rho * p.sx * p.sz);
+      const body = new Body({ pos: [0, -draft + p.sy / 2, 0], mass: p.m,
+        inertia: [p.m * (p.sz ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sz ** 2) / 12],
+        mesh: boxMesh(p.sx, p.sy, p.sz) });
+      body.windArea = p.sx * p.sy; body.windCd = 1.0; body.windZ = p.windZ; body.angDamp = p.angDamp;
+      w.bodies.push(body);
+      return w;
+    },
+    run(w, p) {
+      const hist = solveTimeDomain(w, { T: p.dur, dt: p.dt });
+      this._lastHist = hist;
+      const R = hist[hist.length - 1].bodies[0].rot;
+      const thNum = Math.abs(Math.atan2(R[3], R[0])); // 绕 z 轴倾角
+      const V = p.m / w.env.rho;
+      const draft = V / (p.sx * p.sz);
+      const BM = (p.sz * p.sx ** 3 / 12) / V; // 绕 z(pitch) 的 BM
+      const BG = p.sy / 2 - draft / 2;         // KG=sy/2, KB=draft/2
+      const GM = BM - BG;
+      const F = 0.5 * 1.225 * 1.0 * (p.sx * p.sy) * p.U ** 2;
+      const thAna = Math.atan(F * p.windZ / (w.env.rho * w.env.g * V * GM));
+      const ths = hist.slice(Math.floor(hist.length / 2)).map(h => Math.abs(Math.atan2(h.bodies[0].rot[3], h.bodies[0].rot[0])));
+      return {
+        results: [
+          ['稳态倾角 θ (rad)', thNum, thAna],
+          ['后半程倾角波动 (rad)', Math.max(...ths) - Math.min(...ths), 0],
+        ],
+        info: `风载 F=${F.toFixed(0)}N，GM=${GM.toFixed(3)}m，ρgV·GM=${(w.env.rho * w.env.g * V * GM / 1e6).toFixed(2)}e6 N·m`,
+        plot: { label: '倾角 θ(t) (rad)', xs: hist.map(h => h.t), ys: hist.map(h => Math.atan2(h.bodies[0].rot[3], h.bodies[0].rot[0])) },
       };
     },
   },
