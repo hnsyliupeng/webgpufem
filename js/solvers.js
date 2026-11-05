@@ -211,34 +211,7 @@ export function solveBeamStatic(world, beam, loads) {
   const n1 = world.nodes[beam.n1], n2 = world.nodes[beam.n2];
   const p1 = n1.p, p2 = n2.p;
   const L = v3.dist(p1, p2);
-  const ex = v3.norm(v3.sub(p2, p1));
-  let ey = Math.abs(ex[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
-  const ez = v3.norm(v3.cross(ex, ey)); ey = v3.cross(ez, ex);
-  const T = [ // 局部→全局 [ex, ey, ez]
-    [ex[0], ey[0], ez[0], 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [ex[1], ey[1], ez[1], 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [ex[2], ey[2], ez[2], 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, ex[0], ey[0], ez[0], 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, ex[1], ey[1], ez[1], 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, ex[2], ey[2], ez[2], 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, ex[0], ey[0], ez[0], 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, ex[1], ey[1], ez[1], 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, ex[2], ey[2], ez[2], 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, ex[0], ey[0], ez[0]],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, ex[1], ey[1], ez[1]],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, ex[2], ey[2], ez[2]]];
-  const kl = beamStiffLocal(L, beam.E, beam.A, beam.G, beam.J, beam.Iy, beam.Iz);
-  const Tt = T[0].map((_, c) => T.map(r => r[c]));
-  const kg = Array.from({ length: 12 }, (_, i) => Array.from({ length: 12 }, (_, j) =>
-    T[i].reduce((s, _, a) => s + T[i][a] * 0 + Tt[a][i] * 0, 0)));
-  // kg = T * kl * Tt
-  const tmp = Array.from({ length: 12 }, () => new Array(12).fill(0));
-  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++)
-    for (let a = 0; a < 12; a++) tmp[i][j] += kl[i][a] * Tt[a][j];
-  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
-    let s = 0; for (let a = 0; a < 12; a++) s += T[i][a] * tmp[a][j];
-    kg[i][j] = s;
-  }
+  const { kg } = beamElemGlobal(p1, p2, beam);
   // 自由度：节点2的6个；节点1固定
   const free = [6, 7, 8, 9, 10, 11];
   const F = new Array(12).fill(0);

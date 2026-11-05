@@ -243,13 +243,21 @@ function loadCase(key) {
 }
 
 // ---------- 环境 ----------
+let envDirty = false; // 用户碰过环境滑杆才覆盖算例自带环境
 function bindEnv(id) {
   const inp = $(id), lab = $('v_' + id);
-  inp.oninput = () => { lab.textContent = inp.value; };
+  inp.oninput = () => { lab.textContent = inp.value; envDirty = true; };
 }
 ['envH', 'envT', 'envDir', 'envCur', 'envDepth', 'envRho', 'simTime', 'simDt'].forEach(bindEnv);
 
+function syncEnvSliders(w) { // 算例自带环境 → 滑杆显示
+  const set = (id, v) => { $(id).value = v; $('v_' + id).textContent = v; };
+  set('envH', w.env.wave.H); set('envT', w.env.wave.T);
+  set('envDir', w.env.wave.dir * 180 / Math.PI);
+  set('envCur', w.env.current.speed); set('envDepth', w.env.depth); set('envRho', w.env.rho);
+}
 function applyEnv(w) {
+  if (!envDirty) return; // 未改动：保留算例自身环境（保证 UI 与无头验证一致）
   const d = parseFloat($('envDir').value) * Math.PI / 180;
   w.env.wave = { H: parseFloat($('envH').value), T: parseFloat($('envT').value), dir: d };
   w.env.current = { speed: parseFloat($('envCur').value), dir: d, profile: 'uniform' };
@@ -267,13 +275,15 @@ function run() {
   log(`开始求解: ${c.name} [${st}]`);
   setTimeout(() => {
     world = c.build(p);
+    envDirty = false;
+    syncEnvSliders(world);
     applyEnv(world);
     const t0 = performance.now();
     const out = c.run(world, p);
     const ms = (performance.now() - t0).toFixed(1);
     lastOut = out;
     buildScene(world);
-    histFrames = out.plot && c.solver === 'dynamic' ? c._lastHist : null;
+    histFrames = out.plot && st === 'dynamic' ? c._lastHist : null;
     frameIdx = 0;
     if (histFrames) {
       $('animBar').classList.remove('hidden');
