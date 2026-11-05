@@ -1,72 +1,132 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #0b1220; --panel: #121c30; --panel2: #0e1626; --line: #22314f;
-  --txt: #dbe6f5; --dim: #8fa3c0; --acc: #38bdf8; --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
+/* MarineFEM 工作台 —— 参考 Hydra 设计语言：纸面三栏 + 深渊视口 + 明暗双主题 */
+:root{
+  color-scheme: light;
+  --paper:#eceee9; --panel:#f6f7f4; --ink:#0f2730; --ink-soft:#4a6670;
+  --rule:#c9cfc8; --rule-soft:#dde1da;
+  --abyss:#07151c; --abyss-2:#0c2430;
+  --sounding:#17707f; --sounding-weak:#d5e6e8;
+  --signal:#b4662a; --verified:#2d7148; --fail:#9d3131;
+  --chart-grid:#c6ccc4;
+  box-sizing:border-box;
 }
-html, body { height: 100%; background: var(--bg); color: var(--txt);
-  font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; overflow: hidden; }
-.mono { font-family: Consolas, "Courier New", monospace; font-size: 12px; }
-.hidden { display: none !important; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:#081318; --panel:#0e1f27; --ink:#dfe8e6; --ink-soft:#8ba3a9;
+    --rule:#1d3540; --rule-soft:#152a33;
+    --abyss:#040c11; --abyss-2:#09202b;
+    --sounding:#49b6c6; --sounding-weak:#0f2f38;
+    --signal:#d79548; --verified:#55b37c; --fail:#d4696a;
+    --chart-grid:#1d3540;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:#081318; --panel:#0e1f27; --ink:#dfe8e6; --ink-soft:#8ba3a9;
+  --rule:#1d3540; --rule-soft:#152a33;
+  --abyss:#040c11; --abyss-2:#09202b;
+  --sounding:#49b6c6; --sounding-weak:#0f2f38;
+  --signal:#d79548; --verified:#55b37c; --fail:#d4696a;
+  --chart-grid:#1d3540;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%}
+body{
+  height:100%; margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,"Noto Sans SC","Microsoft YaHei",sans-serif;
+  font-size:14px; line-height:1.5; overflow:hidden;
+}
+.num{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
 
-#topbar { height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 14px;
-  background: linear-gradient(90deg,#0e1a2e,#12233d); border-bottom: 1px solid var(--line); }
-.brand { font-size: 16px; font-weight: 700; color: var(--acc); white-space: nowrap; }
-.brand .sub { font-size: 12px; color: var(--dim); font-weight: 400; margin-left: 6px; }
-.badge { font-size: 11px; color: var(--ok); border: 1px solid var(--ok); border-radius: 4px; padding: 1px 6px; margin-left: 8px; }
-.toolbar { display: flex; align-items: center; gap: 8px; flex: 1; }
-.btn { background: #16233c; border: 1px solid var(--line); color: var(--txt);
-  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-.btn:hover { border-color: var(--acc); color: #fff; }
-.btn.primary { background: linear-gradient(90deg,#0ea5e9,#22d3ee); color: #04121f; font-weight: 700; border: none; }
-.btn.small { padding: 3px 9px; }
-.tabs { display: flex; gap: 6px; margin-left: auto; }
-.tab { background: transparent; border: 1px solid var(--line); color: var(--dim);
-  padding: 5px 14px; border-radius: 6px; cursor: pointer; }
-.tab.active { color: #fff; background: #1d3355; border-color: var(--acc); }
+/* shell：左案例/参数 —— 中视口 —— 右核验面板 */
+#shell{display:grid;grid-template-columns:280px minmax(0,1fr) 348px;grid-template-rows:auto minmax(0,1fr) auto;height:100%}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:18px;padding:10px 16px;border-bottom:1px solid var(--rule);background:var(--panel)}
+header h1{margin:0;font-size:17px;font-weight:600;letter-spacing:.015em}
+header .sub{color:var(--ink-soft);font-size:12.5px}
+header .spacer{flex:1}
+header button{font:inherit}
 
-main { display: flex; height: calc(100% - 48px - 24px); }
-#tab-doc { display: block; overflow: auto; background: var(--panel2); padding: 20px; }
-#docFrame { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-.doc-fallback { padding: 10px; color: var(--dim); } .doc-fallback a { color: var(--acc); }
+aside,#ledger{overflow-y:auto;background:var(--panel);padding:14px 14px 28px}
+aside{border-right:1px solid var(--rule)}
+#ledger{border-left:1px solid var(--rule)}
+main{position:relative;min-width:0;background:var(--abyss)}
+footer{grid-column:1/-1;border-top:1px solid var(--rule);background:var(--panel);
+  padding:6px 16px;display:flex;gap:20px;align-items:center;font-size:12.5px;color:var(--ink-soft);min-height:34px}
 
-#sidebar, #results { width: 310px; overflow-y: auto; background: var(--panel);
-  border-right: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-#results { width: 380px; border-right: none; border-left: 1px solid var(--line); }
-.panel { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
-.panel.grow { flex: 1; display: flex; flex-direction: column; min-height: 200px; }
-.panel h3 { font-size: 12px; color: var(--acc); margin-bottom: 8px; letter-spacing: 1px; }
-.params label, .panel > label { display: block; color: var(--dim); margin: 6px 0 2px; font-size: 12px; }
-.panel select, .panel input { width: 100%; background: #0a1322; color: var(--txt);
-  border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; margin-top: 2px; }
-.desc { color: var(--dim); font-size: 12px; margin-top: 6px; }
+h2{font-size:12px;font-weight:600;margin:18px 0 8px;color:var(--ink-soft);letter-spacing:.04em}
+h2:first-child{margin-top:0}
 
-#viewport { flex: 1; position: relative; background: radial-gradient(ellipse at 50% 30%, #10233f 0%, #070d18 75%); }
-#gl { width: 100%; height: 100%; display: block; }
-.overlay { position: absolute; background: rgba(10,19,34,.8); border: 1px solid var(--line);
-  border-radius: 6px; padding: 6px 10px; font-size: 11px; color: var(--dim); }
-.overlay.tl { left: 10px; top: 10px; max-width: 260px; }
-.overlay.br { right: 10px; bottom: 10px; }
-.overlay.bottom { left: 50%; transform: translateX(-50%); bottom: 12px; display: flex; gap: 10px; align-items: center; }
-#scrub { width: 320px; accent-color: var(--acc); }
-#animTime { color: var(--acc); min-width: 90px; }
-#animSpeed { background: #0a1322; color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 3px; }
+/* 算例列表 */
+.case{display:block;width:100%;text-align:left;border:1px solid var(--rule-soft);background:transparent;color:var(--ink);
+  border-radius:3px;padding:8px 10px;margin-bottom:6px;cursor:pointer;font:inherit;transition:border-color .12s}
+.case:hover{border-color:var(--sounding)}
+.case[aria-pressed="true"]{border-color:var(--sounding);background:var(--sounding-weak);box-shadow:inset 3px 0 0 var(--sounding)}
+.case .t{font-weight:500;font-size:13px}
+.case .d{font-size:11.5px;color:var(--ink-soft);margin-top:2px}
 
-.rtabs { display: flex; gap: 4px; }
-.rtab { flex: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--dim);
-  padding: 6px 4px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 12px; }
-.rtab.active { color: #fff; background: #1d3355; border-color: var(--acc); }
-.rpanel { border-radius: 0 8px 8px 8px; }
-#resultTable { width: 100%; border-collapse: collapse; font-size: 12px; }
-#resultTable th, #resultTable td { border: 1px solid var(--line); padding: 4px 6px; text-align: right; }
-#resultTable th { color: var(--acc); text-align: center; }
-#resultTable td:first-child, #resultTable th:first-child { text-align: left; }
-.err-ok { color: var(--ok); } .err-warn { color: var(--warn); } .err-bad { color: var(--bad); }
-#plot { width: 100%; flex: 1; min-height: 200px; background: #0a1322; border-radius: 6px; border: 1px solid var(--line); }
-.tree { white-space: pre; color: var(--dim); line-height: 1.6; }
-.tree b { color: var(--txt); }
-.log { flex: 1; overflow-y: auto; white-space: pre-wrap; color: var(--dim); line-height: 1.6; }
-.log .t { color: var(--acc); }
+/* 参数 */
+.field{margin-bottom:11px}
+.field.grow{flex:1;min-width:100px}
+.field label{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-soft);margin-bottom:3px}
+.field label b{font-weight:500;color:var(--ink);font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.field input[type=range]{width:100%;accent-color:var(--sounding)}
+.field select,.field input[type=number],select{font:inherit;padding:4px 6px;border:1px solid var(--rule);
+  border-radius:3px;background:var(--paper);color:var(--ink)}
+select.grow{flex:1;min-width:0}
 
-#statusbar { height: 24px; display: flex; gap: 24px; align-items: center; padding: 0 14px;
-  background: #0e1626; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
-#stReady { color: var(--ok); }
+.btn{font:inherit;border:1px solid var(--rule);background:var(--paper);color:var(--ink);
+  border-radius:3px;padding:6px 11px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn:hover{border-color:var(--sounding)}
+.btn.primary{background:var(--sounding);border-color:var(--sounding);color:#fff}
+.btn.small{padding:3px 9px}
+.btn:focus-visible,.case:focus-visible{outline:2px solid var(--sounding);outline-offset:2px}
+.row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+
+/* 核验面板 */
+.verdict{display:flex;align-items:baseline;gap:9px;padding:9px 11px;border-radius:3px;margin-bottom:12px;
+  background:var(--sounding-weak);border-left:3px solid var(--sounding)}
+.verdict .mark{font-weight:600}
+.pass{color:var(--verified)} .warn{color:var(--signal)} .bad{color:var(--fail)}
+table.ledger{width:100%;border-collapse:collapse;font-size:12.5px}
+table.ledger th{text-align:left;font-weight:500;color:var(--ink-soft);font-size:11.5px;
+  border-bottom:1px solid var(--rule);padding:4px 5px 4px 0}
+table.ledger td{padding:5px 5px 5px 0;border-bottom:1px solid var(--rule-soft);vertical-align:baseline}
+table.ledger td.v,table.ledger th.v{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.plot{width:100%;height:168px;border:1px solid var(--rule-soft);border-radius:3px;display:block;margin:4px 0 14px;background:var(--paper)}
+.note{font-size:11.5px;color:var(--ink-soft);margin:6px 0 14px}
+.note code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px}
+
+/* 视口 */
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hud{position:absolute;left:12px;top:10px;color:#cfe3e6;font-size:11.5px;pointer-events:none;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;line-height:1.65;text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:pre}
+#backend{position:absolute;right:12px;top:10px;color:#9fc0c6;font-size:11px;font-family:"IBM Plex Mono",ui-monospace,monospace;pointer-events:none}
+#legend{position:absolute;left:12px;bottom:10px;color:#9fc0c6;font-size:11px;pointer-events:none;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;line-height:1.7;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+#legend i{display:inline-block;width:16px;height:2px;vertical-align:middle;margin-right:6px}
+#animBar{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;display:flex;gap:10px;align-items:center;
+  background:rgba(4,12,17,.82);border:1px solid #1d3540;border-radius:4px;padding:6px 10px}
+#animBar .btn{background:transparent;color:#cfe3e6;border-color:#1d3540}
+#animBar select{background:#0a1a22;color:#cfe3e6;border-color:#1d3540;font-size:11px;padding:2px}
+#scrub{width:min(320px,32vw);accent-color:var(--sounding)}
+#animTime{color:#cfe3e6;min-width:86px;font-size:11px}
+
+/* 文档抽屉 */
+#drawer{position:absolute;inset:0;background:var(--paper);display:none;overflow:auto;padding:14px 18px 40px}
+#drawer.on{display:block}
+#docFrame{width:100%;height:calc(100% - 46px);border:1px solid var(--rule-soft);border-radius:3px;background:var(--panel)}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.tabs .spacer{flex:1}
+
+@media (max-width:1180px){
+  #shell{grid-template-columns:240px minmax(0,1fr);grid-template-rows:auto 320px minmax(0,1fr) auto}
+  main{grid-column:2}
+  #ledger{grid-column:1/-1;border-left:0;border-top:1px solid var(--rule)}
+}
+@media (max-width:760px){
+  #shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 300px minmax(0,1fr) auto}
+  aside{border-right:0;border-bottom:1px solid var(--rule)}
+  main{grid-column:1}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}

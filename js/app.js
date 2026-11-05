@@ -1,4 +1,4 @@
-// MarineFEM 工业级工作台 UI：工具栏 / 环境 / 求解器 / 模型树 / 结果·时程·日志 / 动画控制 / 张力云图
+// MarineFEM 海洋结构分析工作台（Hydra 风格三栏布局 + 明暗主题）
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { cases } from './cases.js';
@@ -6,7 +6,7 @@ import { fmt, v3 } from './math.js';
 import { createWebGPURenderer } from './renderer.js';
 
 const $ = (id) => document.getElementById(id);
-let gpu = null, gpuFrame = null;
+let gpu = null;
 let world = null, currentCase = 'catenary', params = {}, lastOut = null;
 let histFrames = null, frameIdx = 0, playing = false, animTimer = null, animSpeed = 1;
 
@@ -17,19 +17,30 @@ function log(msg) {
   p.scrollTop = p.scrollHeight;
 }
 
+// ---------- 明暗主题 ----------
+(function initTheme() {
+  const saved = localStorage.getItem('mf-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+  $('btnTheme').onclick = () => {
+    const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = cur;
+    localStorage.setItem('mf-theme', cur);
+  };
+})();
+
 // ---------- WebGL 回退场景 ----------
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x070d18, 200, 900);
+scene.fog = new THREE.Fog(0x040c11, 200, 900);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000);
 camera.position.set(250, 160, 350);
 const controls = new OrbitControls(camera, canvas);
 scene.add(new THREE.AmbientLight(0x8899bb, 1.2));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(200, 400, 100); scene.add(sun);
-scene.add(new THREE.GridHelper(1200, 60, 0x1d3355, 0x14233c));
+scene.add(new THREE.GridHelper(1200, 60, 0x1d3540, 0x152a33));
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000),
-  new THREE.MeshLambertMaterial({ color: 0x0a2d4a, transparent: true, opacity: 0.55 }));
+  new THREE.MeshLambertMaterial({ color: 0x0a2d3a, transparent: true, opacity: 0.55 }));
 sea.rotation.x = -Math.PI / 2; scene.add(sea);
 let lineObjs = [], beamObjs = [], bodyObjs = [];
 function resize() {
@@ -40,9 +51,9 @@ new ResizeObserver(resize).observe(canvas); resize();
 
 (async () => {
   gpu = await createWebGPURenderer(canvas);
-  const b = $('gpuBadge');
-  if (gpu) { b.textContent = 'WebGPU'; log('WebGPU(WGSL) 渲染器已启用'); }
-  else { b.textContent = 'WebGL 回退'; b.style.color = 'var(--warn)'; b.style.borderColor = 'var(--warn)'; log('环境不支持 WebGPU，回退 three.js WebGL'); }
+  const b = $('backend');
+  if (gpu) { b.textContent = 'WebGPU · WGSL'; log('WebGPU(WGSL) 渲染器已启用'); }
+  else { b.textContent = 'WebGL 回退'; log('环境不支持 WebGPU，回退 three.js WebGL'); }
 })();
 
 let frames = 0, fpsT = performance.now();
@@ -51,10 +62,11 @@ let frames = 0, fpsT = performance.now();
   if (gpu) gpu.frame(); else { controls.update(); renderer.render(scene, camera); }
   frames++;
   const now = performance.now();
-  if (now - fpsT > 1000) { $('stFps').textContent = `FPS ${frames * 1000 / (now - fpsT) | 0}`; frames = 0; fpsT = now; }
+  if (now - fpsT > 1000) { $('statRight').textContent = `FPS ${frames * 1000 / (now - fpsT) | 0}`; frames = 0; fpsT = now; }
 })();
 
 // ---------- 张力云图 ----------
+let gpuFrame = null;
 function tensionOf(line, frame, seg) {
   const ids = line.nodeIds;
   const a = frame ? frame.nodes[ids[seg]] : world.nodes[ids[seg]].p;
@@ -66,9 +78,6 @@ let tMax = 1;
 function tensionColor(t) {
   const x = Math.min(1, t / (tMax || 1));
   return [x * 255, (1 - x * 0.7) * 200 + 40, (1 - x) * 255]; // 蓝→红
-}
-function hexOf(rgb) {
-  return (Math.round(rgb[0]) << 16) | (Math.round(rgb[1]) << 8) | Math.round(rgb[2]);
 }
 
 // ---------- 场景构建 ----------
@@ -162,20 +171,8 @@ function updateScene(frame) {
 
 function updateLegend() {
   $('legend').innerHTML = world && world.lines.length
-    ? `张力云图（单位 N）<br><span class="mono">0 ── <span style="color:#38bdf8">■</span> 低 ── <span style="color:#f87171">■</span> 高 ── ${fmt(tMax, 0)}</span><br>拖拽旋转 · 滚轮缩放`
+    ? `TENSION MAP (N)\n0 <i style="background:#3b82f6"></i>低 <i style="background:#f87171"></i>高 ${fmt(tMax, 0)}\n拖拽旋转 · 滚轮缩放`
     : '拖拽旋转 · 滚轮缩放';
-}
-
-// ---------- 模型树 ----------
-function showTree(w, info) {
-  const L = [];
-  L.push(`<b>World</b>  ρ=${w.env.rho} g=${w.env.g} 水深=${w.env.depth}m`);
-  L.push(`  环境: 波 H=${w.env.wave.H}m T=${w.env.wave.T}s 向${w.env.wave.dir}rad, 流=${w.env.current.speed}m/s`);
-  w.lines.forEach((l, i) => L.push(`  <b>Line[${i}]</b> 节点=${l.nodeIds.length} 段=${l.nodeIds.length - 1} EA=${l.EA.toExponential(2)} EI=${l.EI} μ=${l.w.toFixed(2)}kg/m D=${l.d}m Cd=${l.cd}`));
-  w.beams.forEach((b, i) => L.push(`  <b>Beam[${i}]</b> L=${v3.dist(w.nodes[b.n1].p, w.nodes[b.n2].p).toFixed(2)}m E=${b.E.toExponential(2)} A=${b.A} Iz=${b.Iz.toExponential(2)}`));
-  w.bodies.forEach((b, i) => L.push(`  <b>Body[${i}]</b> m=${b.mass}kg 网格面=${b.mesh ? b.mesh.faces.length : 0} 排水=${(b._dispV || 0).toFixed(1)}m³`));
-  if (info) L.push(`<b>求解信息</b>: ${info}`);
-  $('modelTree').innerHTML = L.join('\n');
 }
 
 // ---------- 绘图 ----------
@@ -186,45 +183,71 @@ function drawPlot(plot) {
   c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr;
   ctx.scale(dpr, dpr);
   const W = c.clientWidth, H = c.clientHeight;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#eceee9';
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() || '#c6ccc4';
+  const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink-soft').trim() || '#4a6670';
+  const acc = getComputedStyle(document.documentElement).getPropertyValue('--sounding').trim() || '#17707f';
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0a1322'; ctx.fillRect(0, 0, W, H);
-  if (!plot || !plot.xs.length) { ctx.fillStyle = '#8fa3c0'; ctx.fillText('运行分析后显示时程曲线', 12, 20); return; }
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  if (!plot || !plot.xs.length) { ctx.fillStyle = ink; ctx.fillText('运行分析后显示时程曲线', 12, 20); return; }
   const xs = plot.xs, ys = plot.ys;
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const px = (x) => 40 + (x - x0) / (x1 - x0 || 1) * (W - 55);
   const py = (y) => H - 26 - (y - y0) / (y1 - y0 || 1) * (H - 44);
-  ctx.strokeStyle = '#22314f'; ctx.strokeRect(40, 8, W - 55, H - 34);
-  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.5; ctx.beginPath();
+  ctx.strokeStyle = grid; ctx.strokeRect(40, 8, W - 55, H - 34);
+  ctx.strokeStyle = acc; ctx.lineWidth = 1.5; ctx.beginPath();
   xs.forEach((x, i) => i ? ctx.lineTo(px(x), py(ys[i])) : ctx.moveTo(px(x), py(ys[i])));
   ctx.stroke(); ctx.lineWidth = 1;
-  ctx.fillStyle = '#8fa3c0'; ctx.font = '11px sans-serif';
+  ctx.fillStyle = ink; ctx.font = '11px sans-serif';
   ctx.fillText(plot.label, 44, 20);
   ctx.fillText(fmt(y1, 3), 2, py(y1) + 3); ctx.fillText(fmt(y0, 3), 2, py(y0) + 3);
   ctx.fillText(fmt(x0, 1) + 's', 40, H - 12); ctx.fillText(fmt(x1, 1) + 's', W - 48, H - 12);
 }
 
-// ---------- 算例加载与运行 ----------
+// ---------- 算例列表与参数 ----------
+function renderCases() {
+  const box = $('caseList'); box.innerHTML = '';
+  for (const [k, c] of Object.entries(cases)) {
+    const b = document.createElement('button');
+    b.className = 'case';
+    b.setAttribute('aria-pressed', k === currentCase ? 'true' : 'false');
+    b.innerHTML = `<div class="t">${c.name}</div><div class="d">${c.desc}</div>`;
+    b.onclick = () => { currentCase = k; loadCase(k); renderCases(); run(); };
+    box.appendChild(b);
+  }
+}
+
 function loadCase(key) {
   currentCase = key;
   const c = cases[key];
-  $('caseSelect').value = key;
-  $('caseDesc').textContent = c.desc;
   $('solverType').value = c.solver;
+  document.querySelectorAll('.dynOnly').forEach(e => e.style.display = c.solver === 'dynamic' ? 'flex' : 'none');
   params = {};
-  const pp = $('paramPanel'); pp.innerHTML = '';
+  const pp = $('params'); pp.innerHTML = '';
   for (const p of c.params) {
     params[p.k] = p.v;
-    const lab = document.createElement('label');
-    lab.textContent = p.label;
+    const f = document.createElement('div');
+    f.className = 'field';
+    f.innerHTML = `<label>${p.label} <b id="v_p_${p.k}">${p.v}</b></label>`;
     const inp = document.createElement('input');
-    inp.type = 'number'; inp.value = p.v; inp.step = 'any';
-    inp.onchange = () => { params[p.k] = parseFloat(inp.value); };
-    lab.appendChild(inp); pp.appendChild(lab);
+    inp.type = 'range'; inp.step = 'any';
+    const vals = c.params.find(q => q.k === p.k);
+    inp.min = Math.abs(p.v) > 1000 ? p.v * 0.5 : Math.abs(p.v) > 10 ? p.v - Math.abs(p.v) * 0.5 : 0;
+    inp.max = Math.abs(p.v) > 1000 ? p.v * 2 : Math.abs(p.v) > 10 ? p.v + Math.abs(p.v) * 0.5 : Math.max(1, p.v * 4);
+    inp.value = p.v;
+    inp.oninput = () => { params[p.k] = parseFloat(inp.value); $(`v_p_${p.k}`).textContent = inp.value; };
+    f.appendChild(inp); pp.appendChild(f);
   }
-  document.querySelectorAll('.dynOnly').forEach(e => e.style.display = c.solver === 'dynamic' ? 'block' : 'none');
   log(`加载算例: ${c.name}`);
-  $('stModel').textContent = '';
+  $('hud').textContent = c.name;
 }
+
+// ---------- 环境 ----------
+function bindEnv(id) {
+  const inp = $(id), lab = $('v_' + id);
+  inp.oninput = () => { lab.textContent = inp.value; };
+}
+['envH', 'envT', 'envDir', 'envCur', 'envDepth', 'envRho', 'simTime', 'simDt'].forEach(bindEnv);
 
 function applyEnv(w) {
   const d = parseFloat($('envDir').value) * Math.PI / 180;
@@ -234,12 +257,13 @@ function applyEnv(w) {
   w.env.rho = parseFloat($('envRho').value);
 }
 
+// ---------- 运行 ----------
 function run() {
   const c = cases[currentCase];
   const st = $('solverType').value;
   const p = { ...params };
   if (st === 'dynamic') { p.T = p.T || p.dur || parseFloat($('simTime').value); p.dt = p.dt || parseFloat($('simDt').value); }
-  $('stReady').textContent = '计算中…';
+  $('statLeft').textContent = '计算中…';
   log(`开始求解: ${c.name} [${st}]`);
   setTimeout(() => {
     world = c.build(p);
@@ -262,21 +286,35 @@ function run() {
       updateScene(null);
       setPlaying(false);
     }
-    // 结果表
-    const tb = $('resultTable').querySelector('tbody'); tb.innerHTML = '';
+    // 核验结论横幅
+    let nPass = 0, nQ = 0, worst = 0;
+    for (const [name, num, ana] of out.results) {
+      if (!isFinite(num) || !isFinite(ana) || ana === 0) continue;
+      nQ++;
+      const err = Math.abs((num - ana) / ana);
+      if (err <= 0.25) nPass++;
+      worst = Math.max(worst, err);
+    }
+    const cls = nQ && nPass === nQ ? 'pass' : worst <= 0.25 ? 'pass' : worst <= 0.5 ? 'warn' : 'bad';
+    const mark = nQ && nPass === nQ ? '全部通过' : `${nPass}/${nQ} 项通过`;
+    $('verdict').innerHTML = `<div class="verdict"><span class="mark ${cls}">${mark}</span><span>最差误差 ${(worst * 100).toFixed(1)}%（准则 ≤25%）</span></div>`;
+    // 数值对照表
+    const tb = $('ledgerRows'); tb.innerHTML = '';
     for (const [name, num, ana] of out.results) {
       const tr = document.createElement('tr');
-      const err = isFinite(ana) && ana !== 0 ? Math.abs((num - ana) / ana) : NaN;
-      const cls = !isFinite(err) ? '' : err < 0.02 ? 'err-ok' : err < 0.1 ? 'err-warn' : 'err-bad';
-      tr.innerHTML = `<td>${name}</td><td>${fmt(num)}</td><td>${isFinite(ana) ? fmt(ana) : '—'}</td>
-        <td class="${cls}">${isFinite(err) ? (err * 100).toFixed(2) + '%' : '定性'}</td>`;
+      const err = isFinite(ana) && ana !== 0 && isFinite(num) ? Math.abs((num - ana) / ana) : NaN;
+      const cls2 = !isFinite(err) ? '' : err < 0.02 ? 'pass' : err <= 0.25 ? 'warn' : 'bad';
+      tr.innerHTML = `<td>${name}</td><td class="v">${fmt(num)}</td><td class="v">${isFinite(ana) ? fmt(ana) : '—'}</td>
+        <td class="v ${cls2}">${isFinite(err) ? (err * 100).toFixed(2) + '%' : '定性'}</td>`;
       tb.appendChild(tr);
     }
-    showTree(world, (out.info || '') + ` 计算耗时 ${ms} ms`);
-    $('stModel').textContent = `节点=${world.nodes.length} 线=${world.lines.length} 梁=${world.beams.length} 刚体=${world.bodies.length}`;
-    $('stSim').textContent = histFrames ? `时程帧=${histFrames.length}` : '';
-    $('stReady').textContent = `✔ 完成（${ms} ms）`;
+    $('theory').textContent = (out.info || '') + ` · 计算耗时 ${ms} ms · 节点=${world.nodes.length} 线=${world.lines.length} 梁=${world.beams.length} 刚体=${world.bodies.length}`;
+    $('hud').textContent = `${c.name}\n${out.results.filter(r => isFinite(r[2]) && r[2] !== 0).map(r => {
+      const e = Math.abs((r[1] - r[2]) / r[2]) * 100; return `${r[0]}: 误差 ${e.toFixed(1)}%`;
+    }).join('\n')}`;
+    $('statLeft').textContent = `✔ ${c.name} · 求解完成（${ms} ms）`;
     log(`求解完成，耗时 ${ms} ms`);
+    if (out.plot) $('plotTitle').textContent = '时程 · ' + out.plot.label;
     drawPlot(out.plot || null);
   }, 30);
 }
@@ -285,27 +323,29 @@ function run() {
 function setPlaying(v) {
   playing = v;
   $('playBtn').textContent = v ? '⏸' : '▶';
+  $('btnPlay').textContent = v ? '暂停' : '播放';
   if (animTimer) clearInterval(animTimer);
   if (v && histFrames) {
     animTimer = setInterval(() => {
       frameIdx++;
-      if (frameIdx >= histFrames.length - 1) { frameIdx = 0; }
+      if (frameIdx >= histFrames.length - 1) frameIdx = 0;
       $('scrub').value = frameIdx;
       $('animTime').textContent = `t = ${histFrames[frameIdx].t.toFixed(2)} s`;
       updateScene(histFrames[frameIdx]);
     }, 33 / animSpeed);
   }
 }
-$('playBtn')?.addEventListener('click', () => setPlaying(!playing));
-$('scrub')?.addEventListener('input', (e) => {
+$('playBtn').onclick = () => setPlaying(!playing);
+$('btnPlay').onclick = () => setPlaying(!playing);
+$('scrub').oninput = (e) => {
   if (!histFrames) return;
   frameIdx = parseInt(e.target.value);
   $('animTime').textContent = `t = ${histFrames[frameIdx].t.toFixed(2)} s`;
   updateScene(histFrames[frameIdx]);
-});
-$('animSpeed')?.addEventListener('change', (e) => { animSpeed = parseFloat(e.target.value); if (playing) setPlaying(false), setPlaying(true); });
+};
+$('animSpeed').onchange = (e) => { animSpeed = parseFloat(e.target.value); if (playing) { setPlaying(false); setPlaying(true); } };
 
-// ---------- 导出 ----------
+// ---------- 导出 / 视角 / 文档 ----------
 function download(name, text, type = 'application/octet-stream') {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type }));
@@ -326,26 +366,18 @@ $('expCsvBtn').onclick = () => {
 };
 $('shotBtn').onclick = () => {
   if (gpu) gpu.frame(); else renderer.render(scene, camera);
-  const url = canvas.toDataURL('image/png');
-  const a = document.createElement('a'); a.href = url; a.download = `marinefem_${currentCase}.png`; a.click();
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `marinefem_${currentCase}.png`; a.click();
   log('已导出视口截图 PNG');
 };
-
-// ---------- 事件 ----------
-$('caseSelect').innerHTML = Object.entries(cases).map(([k, c]) => `<option value="${k}">${c.name}</option>`).join('');
-$('caseSelect').onchange = (e) => loadCase(e.target.value);
-$('runBtn').onclick = run;
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-  $('tab-analysis').classList.toggle('hidden', t.dataset.tab !== 'analysis');
-  $('tab-doc').classList.toggle('hidden', t.dataset.tab !== 'doc');
-});
-document.querySelectorAll('.rtab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.rtab').forEach(x => x.classList.toggle('active', x === t));
-  for (const k of ['res', 'plot', 'tree', 'log']) $('rp-' + k).classList.toggle('hidden', k !== t.dataset.rtab);
-  if (t.dataset.rtab === 'plot') drawPlot(lastOut ? lastOut.plot : null);
-});
+$('btnFit').onclick = () => { if (world) buildScene(world); };
+$('btnDoc').onclick = () => $('drawer').classList.add('on');
+$('btnCloseDoc').onclick = () => $('drawer').classList.remove('on');
 document.addEventListener('keydown', (e) => { if (e.code === 'Space' && histFrames) { e.preventDefault(); setPlaying(!playing); } });
+$('btnSolve').onclick = run;
+$('solverType').onchange = run;
 
 log('MarineFEM 工作台就绪');
+renderCases();
 loadCase('catenary');
