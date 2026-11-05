@@ -459,7 +459,7 @@ export const cases = {
       { k: 'L', label: '缆长 L (m)', v: 415 },
       { k: 'w', label: '单位湿重 w (N/m)', v: 1500 },
       { k: 'EA', label: '轴向刚度 EA (N)', v: 5e8 },
-      { k: 'n', label: '分段数', v: 50 },
+      { k: 'n', label: '分段数', v: 100 },
     ],
     solver: 'static',
     build(p) {
@@ -474,7 +474,7 @@ export const cases = {
       return w;
     },
     run(w, p) {
-      solveTimeDomain(w, { T: 200, dt: 0.002, damp: 10 });
+      solveTimeDomain(w, { T: 400, dt: 0.0015, damp: 12 });
       // 解析：触地点竖向力=0（切线水平）。悬垂段：Xs=a·asinh(Ls/a), h=a(cosh(Ls/a)−1)
       // 平床段: flat=L−Ls, S=Xs+flat → L−S = a(u−asinh u), u=Ls/a, a=h/(cosh u−1)。对 u 二分
       const g = (u) => {
@@ -608,7 +608,7 @@ export const cases = {
     solver: 'dynamic',
     build(p) {
       const w = new World();
-      w.env.depth = p.d; w.env.seaLevel = 0; w.env.wave = { H: 0, T: 8, dir: 0 };
+      w.env.depth = p.d + 5; w.env.seaLevel = 0; w.env.wave = { H: 0, T: 8, dir: 0 }; // 水深留 5m 余量，缆不触床
       w.env.current = { speed: p.U, dir: 0, profile: 'uniform' };
       const n = Math.round(p.n), ids = [];
       for (let i = 0; i <= n; i++) ids.push(w.addNode([0, -p.d * i / n, 0], 0, i === 0).id);
@@ -622,15 +622,28 @@ export const cases = {
       const dd = v3.sub(b, a), l = v3.len(dd);
       const Ttop = Math.max(0, line.EA * (l - line.L0[0]) / line.L0[0]);
       const thTop = Math.atan2(Math.abs(dd[0]), Math.abs(dd[1]));
+      // 参考：逐段力平衡 march（底端自由 F=0 起步，拖曳取法向分量，计入 EA 伸长）——与离散模型一致的独立 ODE 参照
       const A = Math.PI * p.diam ** 2 / 4;
-      const Wsub = (p.w - w.env.rho * w.env.g * A) * p.d; // 湿重
-      const D = 0.5 * w.env.rho * p.Cd * p.diam * p.U ** 2 * p.d; // 总拖曳
+      const wWet = p.w - w.env.rho * w.env.g * A; // 单位湿重 N/m
+      const kD = 0.5 * w.env.rho * p.Cd * p.diam; // 拖曳系数 (N·s²/m²)，力 = kD·|uN|·uN
+      const M = 4000, ds = p.d / M;
+      let F = [0, 0];
+      for (let i = 0; i < M; i++) {
+        const mag = Math.hypot(F[0], F[1]) || 1e-12;
+        const t = [F[0] / mag, F[1] / mag];
+        const rel = [p.U, 0];
+        const relN = [rel[0] - (rel[0] * t[0] + rel[1] * t[1]) * t[0], rel[1] - (rel[0] * t[0] + rel[1] * t[1]) * t[1]];
+        const rn = Math.hypot(relN[0], relN[1]);
+        F = [F[0] + kD * rn * relN[0] * ds, F[1] - wWet * ds + kD * rn * relN[1] * ds];
+      }
+      const TtopRef = Math.hypot(F[0], F[1]);
+      const thRef = Math.atan2(Math.abs(F[0]), Math.abs(F[1]));
       return {
         results: [
-          ['顶端张力 T_top (N)', Ttop, Math.hypot(Wsub, D)],
-          ['顶端倾角 θ (rad)', thTop, Math.atan2(D, Wsub)],
+          ['顶端张力 T_top (N)', Ttop, TtopRef],
+          ['顶端倾角 θ (rad)', thTop, thRef],
         ],
-        info: `Morison 拖曳 ½ρCd·d·U² 沿缆长积分，湿重 W=${Wsub.toFixed(0)}N，拖曳 D=${D.toFixed(0)}N`,
+        info: `Morison 拖曳法向分量逐段 march 参考（湿重 ${wWet.toFixed(0)}N/m，kD=${kD.toFixed(1)}）`,
       };
     },
   },

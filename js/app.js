@@ -382,7 +382,51 @@ $('shotBtn').onclick = () => {
   log('已导出视口截图 PNG');
 };
 $('btnFit').onclick = () => { if (world) buildScene(world); };
-$('btnDoc').onclick = () => $('drawer').classList.add('on');
+// 极简 Markdown 渲染（离线，无依赖）：标题/表格/列表/粗体/行内代码/链接/段落
+function md2html(md) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  const lines = md.split('\n');
+  const out = [];
+  let table = [], list = [];
+  const flush = () => {
+    if (table.length) {
+      const head = table[0].split('|').filter(s => s.trim() !== '').map(s => `<th>${inline(s.trim())}</th>`).join('');
+      const body = table.slice(2).map(r => '<tr>' + r.split('|').filter(s => s.trim() !== '').map(s => `<td>${inline(s.trim())}</td>`).join('') + '</tr>').join('');
+      out.push(`<table class="ledger"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
+      table = [];
+    }
+    if (list.length) { out.push('<ul>' + list.map(li => `<li>${inline(li)}</li>`).join('') + '</ul>'); list = []; }
+  };
+  for (const ln of lines) {
+    if (/^\|.*\|$/.test(ln.trim())) { table.push(ln.trim().slice(1, -1)); continue; }
+    if (/^\s*-\s+/.test(ln)) { flush(); list.push(ln.replace(/^\s*-\s+/, '')); continue; }
+    flush();
+    const h = ln.match(/^(#{1,6})\s+(.*)/);
+    if (h) { out.push(`<h${h[1].length} style="margin:14px 0 6px;font-size:${20 - h[1].length * 2}px">${inline(h[2])}</h${h[1].length}>`); continue; }
+    if (ln.trim()) out.push(`<p style="margin:6px 0;max-width:90ch">${inline(ln.trim())}</p>`);
+  }
+  flush();
+  return out.join('\n');
+}
+let docLoaded = false;
+$('btnDoc').onclick = async () => {
+  $('drawer').classList.add('on');
+  if (docLoaded) return;
+  docLoaded = true;
+  try {
+    const md = await (await fetch('docs/OrcaFlex_vs_DAVE_深度对比调研.md')).text();
+    $('docFrame').srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      body{font:14px/1.6 "Noto Sans SC",system-ui,sans-serif;max-width:960px;margin:0 auto;padding:18px;color:#0f2730}
+      table{border-collapse:collapse;margin:10px 0}td,th{border:1px solid #c9cfc8;padding:4px 8px;font-size:13px}
+      th{background:#d5e6e8}code{background:#dde1da;padding:1px 4px;border-radius:3px;font-family:ui-monospace,monospace}
+      a{color:#17707f}h1{border-bottom:2px solid #17707f;padding-bottom:6px}
+    </style></head><body>${md2html(md)}</body></html>`;
+  } catch (e) { log('文档加载失败: ' + e.message); }
+};
 $('btnCloseDoc').onclick = () => $('drawer').classList.remove('on');
 document.addEventListener('keydown', (e) => { if (e.code === 'Space' && histFrames) { e.preventDefault(); setPlaying(!playing); } });
 $('btnSolve').onclick = run;

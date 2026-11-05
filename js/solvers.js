@@ -65,12 +65,12 @@ function lineExternalForces(world, line, t, out, withHydro = true) {
       const pen = bed - n.p[1];
       const N = 1e6 * pen * line.d; // 法向反力
       f = v3.add(f, [0, N, 0]);
-      if (line.mu) { // 摩擦力反向于切向速度（正则化）
-        const vt = [n.v[0], 0, n.v[2]];
-        const sp = v3.len(vt);
-        if (sp > 1e-6) {
-          const Ft = Math.min(line.mu * N, 5e6 * pen) * Math.tanh(sp / 0.05);
-          f = v3.sub(f, v3.scale(v3.norm(vt), Ft));
+      if (line.mu) { // Coulomb 静摩擦：切向力需求内取 min(μN, |F_t|)，静平衡(v=0)亦成立
+        const ft = [f[0], 0, f[2]];
+        const ftn = v3.len(ft);
+        if (ftn > 1e-9) {
+          const Ft = Math.min(line.mu * N, ftn);
+          f = v3.sub(f, v3.scale(ft, Ft / ftn));
         }
       }
     }
@@ -308,7 +308,9 @@ export function solveTimeDomain(world, { T = 20, dt = 0.005, damp = 0 } = {}) {
       b.vel = v3.add(b.vel, v3.scale(a, dt));
       b.pos = v3.add(b.pos, v3.scale(b.vel, dt));
       if (b.angDamp) b.mom = v3.sub(b.mom, v3.scale(b.angVel, b.angDamp)); // 角阻尼
-      const am = v3.scale(v3.add(b.mom, b._hydM || [0, 0, 0]), 1 / (b.inertia[0] || 1));
+      const I = b.inertia;
+      const Mtot = v3.add(b.mom, b._hydM || [0, 0, 0]);
+      const am = [Mtot[0] / (I[0] || 1), Mtot[1] / (I[1] || 1), Mtot[2] / (I[2] || 1)];
       b.angVel = v3.add(b.angVel, v3.scale(am, dt));
       const w = b.angVel, R = b.rot;
       const W = [0, -w[2], w[1], w[2], 0, -w[0], -w[1], w[0], 0];
