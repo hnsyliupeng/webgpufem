@@ -10,12 +10,13 @@ export class Node {
 
 export class Line {
   // OrcaFlex 风格集中质量线：节点集中质量，段为轴向弹簧，节点间旋转弹簧抗弯
-  constructor(nodeIds, { EA = 1e8, EI = 0, GJ = 0, w = 10, d = 0.1, cd = 1.0, ca = 1.0, L0 = null, color = 0x38bdf8, compression = false } = {}) {
+  constructor(nodeIds, { EA = 1e8, EI = 0, GJ = 0, w = 10, d = 0.1, cd = 1.0, ca = 1.0, L0 = null, color = 0x38bdf8, compression = false, attach = null } = {}) {
     this.nodeIds = nodeIds;
     this.EA = EA; this.EI = EI; this.GJ = GJ;
     this.w = w; this.d = d; this.cd = cd; this.ca = ca; this.color = color;
     this.L0 = L0; // 各段原长（缺省=初始长度）
     this.compression = compression; // true=允许受压（弹簧）
+    this.attach = attach; // {body: 刚体序号, end:'first'|'last', offset:[x,y,z]} 附着于刚体
   }
 }
 

@@ -170,7 +170,7 @@ function render(world, title, lines, extra) {
 // ---------- 跑全部算例并截图 ----------
 fs.mkdirSync(new URL('../docs/screenshots/', import.meta.url), { recursive: true });
 const outDir = new URL('../docs/screenshots/', import.meta.url).pathname;
-const names = { catenary: 'CASE1_CATENARY', cantilever: 'CASE2_CANTILEVER_BEAM', floatingBox: 'CASE3_FLOATING_BOX', oscillator: 'CASE4_OSCILLATOR', waveCatenary: 'CASE5_WAVE_CATENARY', beamUDL: 'CASE6_BEAM_UDL', heaveDecay: 'CASE7_HEAVE_DECAY', boxWaveRAO: 'CASE8_BOX_WAVE_RAO', touchdown: 'CASE9_TOUCHDOWN', ssBeam: 'CASE10_SS_BEAM', pendulum: 'CASE11_PENDULUM', currentLine: 'CASE12_CURRENT_LINE', windHeel: 'CASE13_WIND_HEEL' };
+const names = { catenary: 'CASE1_CATENARY', cantilever: 'CASE2_CANTILEVER_BEAM', floatingBox: 'CASE3_FLOATING_BOX', oscillator: 'CASE4_OSCILLATOR', waveCatenary: 'CASE5_WAVE_CATENARY', beamUDL: 'CASE6_BEAM_UDL', heaveDecay: 'CASE7_HEAVE_DECAY', boxWaveRAO: 'CASE8_BOX_WAVE_RAO', touchdown: 'CASE9_TOUCHDOWN', ssBeam: 'CASE10_SS_BEAM', pendulum: 'CASE11_PENDULUM', currentLine: 'CASE12_CURRENT_LINE', windHeel: 'CASE13_WIND_HEEL', axialBar: 'CASE14_AXIAL_BAR', torsionBeam: 'CASE15_TORSION', rollDecay: 'CASE16_ROLL_DECAY', mooredBox: 'CASE17_MOORED_BOX' };
 for (const key of Object.keys(cases)) {
   const c = cases[key];
   const p = {}; c.params.forEach(q => p[q.k] = q.v);

@@ -686,4 +686,194 @@ export const cases = {
     },
   },
 
+
+  axialBar: {
+    name: '算例14 · 轴向拉杆（vs δ=PL/EA）',
+    desc: '梁单元轴向刚度验证：端部拉力 P 作用下伸长量与胡克定律解析解对比。',
+    params: [
+      { k: 'L', label: '杆长 L (m)', v: 5 },
+      { k: 'P', label: '拉力 P (N)', v: 2e5 },
+      { k: 'E', label: '弹性模量 E (Pa)', v: 2.1e11 },
+      { k: 'A', label: '截面积 A (m²)', v: 0.01 },
+    ],
+    solver: 'static',
+    build(p) {
+      const w = new World();
+      const n1 = w.addNode([0, 0, 0], 0, true);
+      const n2 = w.addNode([p.L, 0, 0], 0, false);
+      w.beams.push(new Beam(n1.id, n2.id, { E: p.E, G: 8.1e10, A: p.A, Iy: 1e-5, Iz: 1e-5, J: 2e-5 }));
+      w._tipLoad = [p.P, 0, 0];
+      return w;
+    },
+    run(w, p) {
+      const u = solveBeamStatic(w, w.beams[0], { [w.beams[0].n2]: w._tipLoad });
+      return {
+        results: [['端部伸长 δ (m)', u.disp[0], p.P * p.L / (p.E * p.A)]],
+        info: '梁单元轴向自由度（EA/L 刚度）',
+      };
+    },
+  },
+
+  torsionBeam: {
+    name: '算例15 · 圆轴扭转（vs φ=TL/GJ）',
+    desc: '梁单元扭转自由度验证：端部扭矩 T 作用下扭转角与材料力学解析解对比。',
+    params: [
+      { k: 'L', label: '轴长 L (m)', v: 4 },
+      { k: 'T', label: '扭矩 T (N·m)', v: 1e4 },
+      { k: 'G', label: '剪切模量 G (Pa)', v: 8.1e10 },
+      { k: 'J', label: '极惯矩 J (m⁴)', v: 2e-5 },
+    ],
+    solver: 'static',
+    build(p) {
+      const w = new World();
+      const n1 = w.addNode([0, 0, 0], 0, true);
+      const n2 = w.addNode([p.L, 0, 0], 0, false);
+      w.beams.push(new Beam(n1.id, n2.id, { E: 2.1e11, G: p.G, A: 0.01, Iy: 1e-5, Iz: 1e-5, J: p.J }));
+      // 端部扭矩绕 x 轴：节点2 的 Mx 自由度（dof 9）
+      w._tipMom = { [n2.id]: [0, 0, 0] };
+      w._tipT = p.T;
+      return w;
+    },
+    run(w, p) {
+      const beam = w.beams[0];
+      const u = solveBeamChain(w, [beam.n1, beam.n2], beam, { [beam.n2]: [0, 0, 0, p.T, 0, 0] }, { first: 'fixed', last: 'free' });
+      return {
+        results: [['端部扭转角 φ (rad)', Math.abs(u.disp[9]), p.T * p.L / (p.G * p.J)]],
+        info: `单梁单元扭转自由度（GJ/L，12×12 矩阵 dof 3/9），节点力矩载荷`,
+      };
+    },
+  },
+
+  rollDecay: {
+    name: '算例16 · 浮箱 Roll 自由衰减（时域 vs 频域 Roll 周期）',
+    desc: '浮箱初始横倾释放，时域识别横摇衰减周期并与频域 Roll 固有周期对比（角动力学+水静力矩验证）。',
+    params: [
+      { k: 'sx', label: '箱长 X (m)', v: 20 },
+      { k: 'sz', label: '箱宽 Z (m)', v: 10 },
+      { k: 'sy', label: '箱高 Y (m)', v: 6 },
+      { k: 'm', label: '质量 m (kg)', v: 6.15e5 },
+      { k: 'th0', label: '初始横倾角 θ0 (deg)', v: 5 },
+      { k: 'angDamp', label: '角阻尼 (N·m·s)', v: 3e6 },
+      { k: 'dur', label: '仿真时长 (s)', v: 60 },
+      { k: 'dt', label: '步长 dt (s)', v: 0.01 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = 50; w.env.wave = { H: 0, T: 8, dir: 0 }; w.env.current.speed = 0; w.env.wind.speed = 0;
+      const draft = p.m / (w.env.rho * p.sx * p.sz);
+      const body = new Body({ pos: [0, -draft + p.sy / 2, 0], mass: p.m,
+        inertia: [p.m * (p.sz ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sz ** 2) / 12],
+        mesh: boxMesh(p.sx, p.sy, p.sz) });
+      body.angDamp = p.angDamp;
+      body.rot = [1,0,0, 0,Math.cos(p.th0*Math.PI/180),-Math.sin(p.th0*Math.PI/180), 0,Math.sin(p.th0*Math.PI/180),Math.cos(p.th0*Math.PI/180)];
+      w.bodies.push(body);
+      return w;
+    },
+    run(w, p) {
+      const fr = freqDomain(w, w.bodies[0]);
+      const roll = fr.modes.find(m => m.dof === 'roll');
+      const hist = solveTimeDomain(w, { T: p.dur, dt: p.dt });
+      this._lastHist = hist;
+      const ths = hist.map(h => Math.atan2(h.bodies[0].rot[7], h.bodies[0].rot[8]));
+      const zeros = [];
+      for (let i = 1; i < ths.length; i++) if (ths[i - 1] > 0 && ths[i] <= 0) {
+        const f = -ths[i - 1] / (ths[i] - ths[i - 1]);
+        zeros.push(hist[i - 1].t + f * (hist[i].t - hist[i - 1].t));
+      }
+      const Tnum = zeros.length >= 2 ? (zeros[zeros.length - 1] - zeros[0]) / (zeros.length - 1) : NaN;
+      return {
+        results: [['Roll 衰减周期 (s)', Tnum, roll.T]],
+        info: `网格水静力恢复力矩 + 角阻尼，频域参考 T=${roll.T.toFixed(3)}s`,
+        plot: { label: '横倾角 θ(t) (rad)', xs: hist.map(h => h.t), ys: ths },
+      };
+    },
+  },
+
+  mooredBox: {
+    name: '算例17 · 波浪中系泊浮箱（刚体-缆耦合，vs 单缆静力自洽）',
+    desc: '浮箱经悬链线系泊于海床：附着点跟随刚体 6DoF，缆反力回传刚体。无波浪时顶端张力均值应回归单缆静力解，有波浪时响应周期=波周期。',
+    params: [
+      { k: 'sx', label: '箱长 X (m)', v: 20 },
+      { k: 'sz', label: '箱宽 Z (m)', v: 10 },
+      { k: 'sy', label: '箱高 Y (m)', v: 6 },
+      { k: 'm', label: '质量 m (kg)', v: 6.15e5 },
+      { k: 'depth', label: '水深 (m)', v: 50 },
+      { k: 'S', label: '锚点水平距 (m)', v: 40 },
+      { k: 'L', label: '缆长 L (m)', v: 75 },
+      { k: 'w', label: '单位湿重 w (N/m)', v: 900 },
+      { k: 'H', label: '波高 H (m)', v: 3 },
+      { k: 'T', label: '波周期 T (s)', v: 6 },
+      { k: 'dur', label: '仿真时长 (s)', v: 60 },
+      { k: 'dt', label: '步长 dt (s)', v: 0.002 },
+      { k: 'n', label: '缆分段数', v: 10 },
+    ],
+    solver: 'dynamic',
+    build(p) {
+      const w = new World();
+      w.env.depth = p.depth;
+      w.env.wave = { H: p.H, T: p.T, dir: 0 };
+      const draft = p.m / (w.env.rho * p.sx * p.sz);
+      const body = new Body({ pos: [0, -draft + p.sy / 2, 0], mass: p.m,
+        inertia: [p.m * (p.sz ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sy ** 2) / 12, p.m * (p.sx ** 2 + p.sz ** 2) / 12],
+        mesh: boxMesh(p.sx, p.sy, p.sz) });
+      body.cDamp = 5e5;
+      w.bodies.push(body);
+      // 悬链线：一端附着箱体舷侧，一端锚于海床
+      const n = Math.round(p.n), ids = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        // 初值与附着点一致：首节点 = 刚体位姿 + offset，末节点 = 锚点
+        const ax = p.sx / 2, ay = -draft; // attach 世界坐标 (body.pos + [sx/2,-sy/2,0])
+        ids.push(w.addNode([ax + p.S * t, ay + (-p.depth - ay) * t, 0], 0, i === 0 || i === n).id);
+      }
+      const line = new Line(ids, { EA: 3e8, EI: 0, w: p.w / w.env.g, d: 0.2, cd: 1.2, ca: 1.0, L0: Array(n).fill(p.L / n), attach: { body: 0, end: 'first', offset: [p.sx / 2, -p.sy / 2, 0] } });
+      w.lines.push(line);
+      return w;
+    },
+    run(w, p) {
+      const hist = solveTimeDomain(w, { T: p.dur, dt: p.dt });
+      this._lastHist = hist;
+      const line = w.lines[0], ids = line.nodeIds;
+      const Ts = hist.map(h => {
+        const a = h.nodes[ids[0]], b = h.nodes[ids[1]];
+        const l = v3.dist(a, b);
+        return Math.max(0, line.EA * (l - line.L0[0]) / line.L0[0]);
+      });
+      const tail = Ts.slice(Math.floor(Ts.length / 2));
+      const mean = tail.reduce((s, v) => s + v, 0) / tail.length;
+      // 参考：同参数单缆静力（锚端固定海床，顶端水平张力由悬链线解析）— 用无波浪耦合模型松弛后均值自洽
+      const w0 = cases.mooredBox.build(p);
+      w0.env.wave = { H: 0, T: p.T, dir: 0 };
+      const h0 = solveTimeDomain(w0, { T: p.dur, dt: p.dt });
+      const l0 = w0.lines[0], i0 = l0.nodeIds;
+      const T0 = h0.map(hh => {
+        const a = hh.nodes[i0[0]], b = hh.nodes[i0[1]];
+        return Math.max(0, l0.EA * (v3.dist(a, b) - l0.L0[0]) / l0.L0[0]);
+      });
+      const tail0 = T0.slice(Math.floor(T0.length / 2));
+      const mean0 = tail0.reduce((s, v) => s + v, 0) / tail0.length;
+      // 有波浪时张力主导周期
+      const zs = hist.map(h => h.bodies[0].pos[1]);
+      const zt = zs.slice(Math.floor(zs.length / 2)), xs = hist.slice(Math.floor(hist.length / 2)).map(h => h.t);
+      const zeros = [];
+      for (let i = 1; i < zt.length; i++) if (zt[i - 1] > 0 && zt[i] <= 0) {
+        const f = -zt[i - 1] / (zt[i] - zt[i - 1]);
+        zeros.push(xs[i - 1] + f * (xs[i] - xs[i - 1]));
+      }
+      const Tresp = zeros.length >= 2 ? (zeros[zeros.length - 1] - zeros[0]) / (zeros.length - 1) : NaN;
+      return {
+        results: [
+          ['无波浪稳态顶端张力 (N)', mean0, NaN],
+          ['波浪中张力松弛比例 (T<T0/10)', tail.filter(v => v < mean0 / 10).length / tail.length, NaN],
+          ['波浪中箱体 Heave 响应周期 (s)', Tresp, p.T],
+          ['波浪中顶端张力均值 (N)', mean, NaN],
+          ['波浪中顶端张力峰值 (N)', Math.max(...Ts), NaN],
+        ],
+        info: `附着点跟随刚体 6DoF，缆反力(力+力矩)回传；H=${p.H}m T=${p.T}s`,
+        plot: { label: '顶端张力 T(t) (N)', xs: hist.map(h => h.t), ys: Ts },
+      };
+    },
+  },
+
 };

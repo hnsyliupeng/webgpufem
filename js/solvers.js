@@ -185,7 +185,8 @@ export function solveBeamChain(world, ids, beam, loads, bc = { first: 'pin', las
     const gi = ids.indexOf(Number(idStr));
     if (gi < 0) continue;
     const l = loads[idStr];
-    F[gi * 6] += l[0]; F[gi * 6 + 1] += l[1]; F[gi * 6 + 2] += l[2];
+    F[gi * 6] += l[0] || 0; F[gi * 6 + 1] += l[1] || 0; F[gi * 6 + 2] += l[2] || 0;
+    F[gi * 6 + 3] += l[3] || 0; F[gi * 6 + 4] += l[4] || 0; F[gi * 6 + 5] += l[5] || 0;
   }
   // 边界条件
   const fixedDofs = new Set();
@@ -260,11 +261,38 @@ export function solveTimeDomain(world, { T = 20, dt = 0.005, damp = 0 } = {}) {
   const nSteps = Math.floor(T / dt);
   const hist = [];
   let t = 0;
+  // 刚体-缆耦合：附着节点（line.attach={body,end,offset}）位姿跟随刚体
+  const attachNodes = [];
+  world.lines.forEach((line, li) => {
+    if (!line.attach) return;
+    const id = line.attach.end === 'first' ? line.nodeIds[0] : line.nodeIds[line.nodeIds.length - 1];
+    attachNodes.push({ line, li, id });
+  });
+  const syncAttach = () => {
+    for (const a of attachNodes) {
+      const b = world.bodies[a.line.attach.body];
+      const R = b.rot, off = a.line.attach.offset;
+      const r = [R[0]*off[0]+R[1]*off[1]+R[2]*off[2], R[3]*off[0]+R[4]*off[1]+R[5]*off[2], R[6]*off[0]+R[7]*off[1]+R[8]*off[2]];
+      const n = world.nodes[a.id];
+      n.p = v3.add(b.pos, r);
+      n.v = v3.add(b.vel, v3.cross(b.angVel, r));
+      n._attachR = r;
+    }
+  };
+  syncAttach();
   for (let s = 0; s <= nSteps; s++) {
+    syncAttach();
     const forces = world.nodes.map(() => [0, 0, 0]);
     for (const line of world.lines) {
       lineInternalForces(world, line, forces);
       lineExternalForces(world, line, t, forces, true);
+    }
+    // 附着节点反力回传到刚体（力+力矩）
+    for (const a of attachNodes) {
+      const b = world.bodies[a.line.attach.body];
+      const f = forces[a.id];
+      b.f = v3.sub(b.f, f);
+      b.mom = v3.sub(b.mom, v3.cross(world.nodes[a.id]._attachR || [0,0,0], f));
     }
     if (damp > 0) for (const n of world.nodes)
       if (!n.fixed) forces[n.id] = v3.sub(forces[n.id], v3.scale(n.v, damp * n.m));
